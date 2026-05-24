@@ -320,11 +320,12 @@ function guessCategory(description, amount, type){
   return 'Other';
 }
 
-function guessType(description, amount){
+function guessType(description){
   const desc = description.toLowerCase();
-  const incomeKeywords = ['salary','payroll','pay','wage','income','deposit','reimbursement','refund','cashback','interest','dividend','credit'];
+  // Only flag as income if very clearly an income transaction
+  const incomeKeywords = ['salary','payroll','wage','interest earned','dividend','reimbursement from'];
   if(incomeKeywords.some(k=>desc.includes(k))) return 'income';
-  return 'expense';
+  return 'expense'; // default everything to expense
 }
 
 function parseCSV(text){
@@ -393,7 +394,7 @@ function parseCSV(text){
     if(amount <= 0) continue;
 
     // Override type based on description keywords
-    const descType = guessType(desc, amount);
+    const descType = guessType(desc);
     if(descType === 'income') type = 'income';
 
     const subType = type==='income'?'income':'credit';
@@ -411,17 +412,38 @@ function parseCSV(text){
 }
 
 function formatDate(raw){
-  // Try to parse various date formats and return DD/MM/YY
+  // Always treat as AU format: D/M/YYYY or DD/MM/YYYY or DD/MM/YY
+  // Never use JS Date() parser — it assumes US format for ambiguous dates
   try {
-    const d = new Date(raw);
-    if(!isNaN(d)){
-      const dd = String(d.getDate()).padStart(2,'0');
-      const mm = String(d.getMonth()+1).padStart(2,'0');
-      const yy = String(d.getFullYear()).slice(2);
+    raw = raw.trim().replace(/"/g,'');
+
+    // D/M/YYYY or DD/MM/YYYY or D/M/YY — AU format (day first)
+    const auSlash = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if(auSlash){
+      const dd = auSlash[1].padStart(2,'0');
+      const mm = auSlash[2].padStart(2,'0');
+      const yy = auSlash[3].length===4 ? auSlash[3].slice(2) : auSlash[3].padStart(2,'0');
       return `${dd}/${mm}/${yy}`;
     }
-  } catch(e){}
-  return raw;
+
+    // D-M-YYYY or DD-MM-YYYY — AU format with dashes
+    const auDash = raw.match(/^(\d{1,2})-(\d{1,2})-(\d{2,4})$/);
+    if(auDash){
+      const dd = auDash[1].padStart(2,'0');
+      const mm = auDash[2].padStart(2,'0');
+      const yy = auDash[3].length===4 ? auDash[3].slice(2) : auDash[3].padStart(2,'0');
+      return `${dd}/${mm}/${yy}`;
+    }
+
+    // YYYY-MM-DD (ISO format from some banks)
+    const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(iso){
+      return `${iso[3]}/${iso[2]}/${iso[1].slice(2)}`;
+    }
+
+    // Already formatted or unknown — return as-is
+    return raw;
+  } catch(e){ return raw; }
 }
 
 function handleStatementUpload(event){
@@ -490,7 +512,7 @@ function renderUploadReview(){
       </div>
       <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;color:${t.type==='income'?'var(--green)':'var(--pink)'};">${t.type==='income'?'+':'-'}$${parseFloat(t.amount).toFixed(2)}</div>
       <select onchange="updateUploadRow(${t._id},'type',this.value)" style="font-size:11px;padding:4px 6px;">
-        <option value="expense" ${t.type!=='income'?'selected':''}>− Expense</option>
+        <option value="expense" ${t.type==='income'?'':'selected'}>− Expense</option>
         <option value="income" ${t.type==='income'?'selected':''}>+ Income</option>
       </select>
       <select onchange="updateUploadRow(${t._id},'category',this.value)" style="font-size:11px;padding:4px 6px;">
