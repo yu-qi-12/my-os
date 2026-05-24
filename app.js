@@ -27,17 +27,26 @@ const DEFAULT_CATEGORY_TYPES = Object.fromEntries([
 ]);
 const CAT_COLOR_PALETTE = ['var(--green)','var(--blue)','var(--orange)','var(--pink)','var(--purple)','#2a9d8f','#e9c46a','var(--muted)','#e76f51','#457b9d','#a8dadc','#6d6875'];
 const CATEGORY_TYPE_KEY = 'my-os-category-types';
+const REMOVED_CATEGORY_KEY = 'my-os-removed-categories';
+let removedCategories = loadRemovedCategories();
 let categoryTypes = loadCategoryTypes();
+function loadRemovedCategories(){
+  try { return JSON.parse(localStorage.getItem(REMOVED_CATEGORY_KEY)||'[]'); }
+  catch(e){ return []; }
+}
+function saveRemovedCategories(){ localStorage.setItem(REMOVED_CATEGORY_KEY, JSON.stringify([...new Set(removedCategories)])); }
+function isRemovedCategory(cat){ return removedCategories.includes(cat); }
+function restoreCategory(cat){ removedCategories = removedCategories.filter(c=>c!==cat); saveRemovedCategories(); }
+function markCategoryRemoved(cat){ if(!removedCategories.includes(cat)) removedCategories.push(cat); saveRemovedCategories(); }
+
 function loadCategoryTypes(){
   try { return {...DEFAULT_CATEGORY_TYPES, ...(JSON.parse(localStorage.getItem(CATEGORY_TYPE_KEY)||'{}'))}; }
   catch(e){ return {...DEFAULT_CATEGORY_TYPES}; }
 }
 function saveCategoryTypes(){ localStorage.setItem(CATEGORY_TYPE_KEY, JSON.stringify(categoryTypes)); }
 function getCategories(){
-  const base = [...(state.categories||[]), ...DEFAULT_CATEGORIES];
-  (state.transactions||[]).forEach(t=>{ if(t.cat) base.push(t.cat); });
-  Object.keys(state.budgets||{}).forEach(c=>base.push(c));
-  return [...new Set(base.filter(Boolean))];
+  const base = [...(state.categories||[]), ...DEFAULT_CATEGORIES, ...Object.keys(state.budgets||{})];
+  return [...new Set(base.filter(Boolean))].filter(c=>!isRemovedCategory(c));
 }
 function getCategoryType(cat){
   if(categoryTypes[cat]) return categoryTypes[cat];
@@ -353,12 +362,16 @@ const CAT_RULES = [
 
 function guessCategory(description, amount, type){
   const desc = description.toLowerCase();
+  const cats=getCategories();
+  const fallback = type==='income'
+    ? (getCategoriesByType('income')[0] || cats[0] || 'Other')
+    : (getCategoriesByType('expense')[0] || cats[0] || 'Other');
   for(const rule of CAT_RULES){
     if(rule.keywords.some(k=>desc.includes(k))){
-      return rule.cat;
+      return cats.includes(rule.cat) ? rule.cat : fallback;
     }
   }
-  return 'Other';
+  return cats.includes('Other') ? 'Other' : fallback;
 }
 
 function guessType(description){
@@ -594,6 +607,24 @@ function updateUploadRow(id, field, val){
   if(t) t[field]=val;
   // re-colour amount cell
   renderUploadReview();
+}
+
+
+async function quickAddUploadCategory(rowId){
+  const raw=prompt('New category name:');
+  const name=(raw||'').trim();
+  if(!name) return;
+  const typeRaw=prompt('Category type: expense, income, or asset', 'expense');
+  const type=['expense','income','asset'].includes(String(typeRaw||'').toLowerCase()) ? String(typeRaw).toLowerCase() : 'expense';
+  const warning=categorySimilarityWarning(name);
+  if(warning && !confirm(warning.replace(/^⚠️\s*/, '')+'\n\nContinue adding this category?')) return;
+  restoreCategory(name);
+  if(!state.categories.includes(name)) state.categories.push(name);
+  setCategoryType(name,type);
+  await sb.from('categories').upsert({name,sort_order:state.categories.length});
+  const row=pendingUploadTxs.find(t=>t._id===rowId);
+  if(row){ row.category=name; row.rememberRule=true; row.ruleApplied=false; }
+  renderCatSelect(); renderBudgetView(); renderUploadReview(); showSaved();
 }
 
 async function confirmUpload(){
@@ -1147,10 +1178,8 @@ let uploadSearchTerm = '';
 // ── Helpers ──
 function effectiveAmount(t){ return t.acct==='joint'?t.amount*0.5:t.amount; }
 function getCategories(){
-  const base = [...(state.categories||[]), ...DEFAULT_CATEGORIES];
-  (state.transactions||[]).forEach(t=>{ if(t.cat) base.push(t.cat); });
-  Object.keys(state.budgets||{}).forEach(c=>base.push(c));
-  return [...new Set(base.filter(Boolean))];
+  const base = [...(state.categories||[]), ...DEFAULT_CATEGORIES, ...Object.keys(state.budgets||{})];
+  return [...new Set(base.filter(Boolean))].filter(c=>!isRemovedCategory(c));
 }
 function getCatColor(i){ return CAT_COLOR_PALETTE[i%CAT_COLOR_PALETTE.length]; }
 function renderCatSelect(){
@@ -1604,7 +1633,10 @@ function renderMonthly(){
 // ── UPLOAD ──
 function toggleUploadPanel(){
   const p=document.getElementById('uploadPanel');
-  p.style.display=p.style.display==='none'?'block':'none';
+  if(!p) return;
+  const opening = p.style.display==='none' || !p.style.display;
+  p.style.display=opening?'block':'none';
+  if(opening) p.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
 function selectUploadAcct(btn, acct){
@@ -1711,9 +1743,12 @@ function renderUploadReview(){
           <div style="font-size:11px;color:var(--muted);">${escapeHTML(t.date)}</div>
         </div>
         <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;text-align:right;color:${t.type==='income'?'var(--green)':'var(--pink)'};">${t.type==='income'?'+':'-'}$${parseFloat(t.amount).toFixed(2)}</div>
-        <select onchange="updateUploadRow(${t._id},'category',this.value)" class="upload-small-select">
-          ${cats.map(c=>`<option ${c===t.category?'selected':''}>${c}</option>`).join('')}
-        </select>
+        <div class="upload-cat-cell">
+          <select onchange="updateUploadRow(${t._id},'category',this.value)" class="upload-small-select">
+            ${cats.map(c=>`<option ${c===t.category?'selected':''}>${c}</option>`).join('')}
+          </select>
+          <button class="upload-add-cat-btn" onclick="quickAddUploadCategory(${t._id})" title="Add a new category">+ Cat</button>
+        </div>
         <label class="upload-mini-check" title="Save this merchant/category rule for future uploads"><input type="checkbox" ${t.rememberRule?'checked':''} onchange="updateUploadRow(${t._id},'rememberRule',this.checked)"> Rule</label>
         <div style="display:flex;gap:4px;flex-wrap:wrap;">
           ${t.duplicate?'<span class="upload-warning-pill">Possible duplicate</span>':''}
@@ -1936,6 +1971,69 @@ async function setBudget(cat,val){
   renderBudgetView();showSaved();
 }
 
+
+function normaliseCategoryName(value){
+  return String(value||'').toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]+/g,' ').trim();
+}
+function categoryTokens(value){
+  return normaliseCategoryName(value).split(' ').filter(w=>w.length>2 && !['and','the','for','with'].includes(w));
+}
+function categorySimilarityWarning(name){
+  const n=normaliseCategoryName(name);
+  if(!n) return '';
+  const existing=getCategories();
+  const exact=existing.find(c=>normaliseCategoryName(c)===n);
+  if(exact) return `⚠️ “${escapeHTML(name)}” already exists as “${escapeHTML(exact)}”. You can still add it if you want a separate category.`;
+
+  const synonymGroups=[
+    ['transport','public transit','transit','train','bus','metro','uber','taxi','commute','parking','fuel','petrol'],
+    ['food','dining','restaurant','cafe','coffee','groceries','grocery','supermarket'],
+    ['shopping','clothes','clothing','fashion','retail'],
+    ['subscription','subscriptions','membership','software','apps'],
+    ['health','medical','chemist','pharmacy','doctor','dental'],
+    ['utility','utilities','bills','electricity','gas','water','internet','phone'],
+    ['saving','savings','asset','assets','investment','investments','etf','super'],
+    ['income','salary','bonus','refund','reimbursement','dividend','interest']
+  ];
+  const group=synonymGroups.find(g=>g.some(term=>n.includes(term)));
+  if(group){
+    const match=existing.find(c=>{
+      const cn=normaliseCategoryName(c);
+      return c!==name && group.some(term=>cn.includes(term));
+    });
+    if(match) return `⚠️ This looks similar to “${escapeHTML(match)}”. Continue if you want both categories.`;
+  }
+
+  const newTokens=categoryTokens(name);
+  const overlap=existing.find(c=>{
+    const tokens=categoryTokens(c);
+    return newTokens.length && tokens.length && newTokens.some(t=>tokens.includes(t));
+  });
+  if(overlap) return `⚠️ This may overlap with “${escapeHTML(overlap)}”. Continue if you want both categories.`;
+  return '';
+}
+function ensureCategoryWarningEl(){
+  let el=document.getElementById('newCatWarning');
+  if(el) return el;
+  const input=document.getElementById('newCatInput');
+  if(!input) return null;
+  el=document.createElement('div');
+  el.id='newCatWarning';
+  el.className='category-warning';
+  el.style.display='none';
+  const card=document.getElementById('budgetAddCategoryCard');
+  if(card) card.appendChild(el);
+  return el;
+}
+function checkCategoryWarning(){
+  const input=document.getElementById('newCatInput');
+  const el=ensureCategoryWarningEl();
+  if(!input||!el) return;
+  const msg=categorySimilarityWarning(input.value.trim());
+  el.innerHTML=msg;
+  el.style.display=msg?'block':'none';
+}
+
 async function addCategory(){
   const nameEl=document.getElementById('newCatInput');
   const budgetEl=document.getElementById('newCatBudget');
@@ -1944,26 +2042,34 @@ async function addCategory(){
   const budget=parseFloat(budgetEl.value)||0;
   const type=typeEl?typeEl.value:'expense';
   if(!name) return;
-  if(getCategories().includes(name)){alert('Category already exists.');return;}
-  state.categories.push(name);
+
+  const warning=categorySimilarityWarning(name);
+  if(warning && !confirm(warning.replace(/^⚠️\s*/, '')+'\n\nContinue adding this category?')) return;
+
+  restoreCategory(name);
+  if(!state.categories.includes(name)) state.categories.push(name);
   setCategoryType(name,type);
-  await sb.from('categories').insert({name,sort_order:state.categories.length});
+  await sb.from('categories').upsert({name,sort_order:state.categories.length});
   if(budget>0){await sb.from('budgets').upsert({cat:name,amount:budget});state.budgets[name]=budget;}
   nameEl.value=''; budgetEl.value=''; if(typeEl) typeEl.value='expense';
+  checkCategoryWarning();
   renderCatSelect(); renderBudgetView(); showSaved();
 }
 
+
 async function removeCategory(cat){
-  if(!confirm(`Remove category "${cat}"? Existing transactions keep their label. Budget for this category will be deleted.`)) return;
+  if(!confirm(`Remove category "${cat}"? Existing transactions keep their label. Budget for this category will be deleted, and it will no longer appear in CSV/category dropdowns.`)) return;
   state.categories=state.categories.filter(c=>c!==cat);
+  markCategoryRemoved(cat);
   delete state.budgets[cat];
   delete categoryTypes[cat]; saveCategoryTypes();
   await Promise.all([
     sb.from('categories').delete().eq('name',cat),
     sb.from('budgets').delete().eq('cat',cat)
   ]);
-  renderCatSelect(); renderBudgetView(); showSaved();
+  renderCatSelect(); renderBudgetView(); renderMonthly(); renderYearly(); showSaved();
 }
+
 
 // ── EDIT TRANSACTION ──
 let currentEditTxId=null;
