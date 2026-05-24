@@ -1063,7 +1063,7 @@ function renderBarChart(data,maxVal,goalVal){
 }
 
 // ─── START ───
-boot();// ─── FINANCE ───
+// ─── FINANCE ───
 
 // ── State ──
 const ACCT_LABELS = {'personal-credit':'Personal Credit','debit':'Debit','joint':'Joint (÷2)'};
