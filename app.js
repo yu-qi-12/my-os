@@ -537,11 +537,11 @@ async function confirmUpload(){
   const btn=document.getElementById('confirmUploadBtn');
   btn.textContent='Saving…'; btn.disabled=true;
   const toSave=pendingUploadTxs.filter(t=>t.keep);
-  const now=new Date();
-  const mk=monthKey(now.getFullYear(),now.getMonth());
   for(const t of toSave){
     const id=Date.now()+Math.random();
     const subType=t.type==='income'?'income':(t.subType||'credit');
+    // Derive month key from transaction date (DD/MM/YY) not today
+    const mk = monthKeyFromDate(t.date);
     await sb.from('transactions').insert({
       id,description:t.description,amount:parseFloat(t.amount),
       type:t.type,sub_type:subType,cat:t.category,
@@ -983,6 +983,20 @@ function updateOverview(){
 
 // ─── SHARED HELPERS ───
 function monthKey(y,m){return `${y}-${String(m+1).padStart(2,'0')}`;}
+function monthKeyFromDate(dateStr){
+  // Parse DD/MM/YY or DD/MM/YYYY
+  try {
+    const parts = dateStr.split('/');
+    if(parts.length===3){
+      const mm = parts[1].padStart(2,'0');
+      const yy = parts[2].length===2 ? '20'+parts[2] : parts[2];
+      return `${yy}-${mm}`;
+    }
+  } catch(e){}
+  // Fallback to current month
+  const n=new Date();
+  return monthKey(n.getFullYear(),n.getMonth());
+}
 function dayKey(y,m,d){return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
 function deltaBadge(curr,prev){if(prev===null||prev===undefined) return '';const diff=curr-prev;if(diff>0) return `<span class="delta up">▲ ${diff}</span>`;if(diff<0) return `<span class="delta down">▼ ${Math.abs(diff)}</span>`;return `<span class="delta flat">= same</span>`;}
 function renderBarChart(data,maxVal,goalVal){
