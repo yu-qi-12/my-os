@@ -328,9 +328,7 @@ function guessType(description, amount){
 }
 
 function parseCSV(text){
-  const lines = text.split(/
-?
-/).filter(l=>l.trim());
+  const lines = text.split(/\r?\n/).filter(l=>l.trim());
   if(lines.length < 2) return [];
   
   // Detect delimiter
@@ -446,7 +444,7 @@ function handleStatementUpload(event){
       const txs = parseCSV(text);
 
       if(txs === null){
-        document.getElementById('uploadStatus').innerHTML='<span style="color:var(--pink);">⚠️ Could not read this CSV format. Make sure you're uploading a bank statement CSV.</span>';
+        document.getElementById("uploadStatus").innerHTML='<span style="color:var(--pink);">⚠️ Could not read this CSV format. Make sure you are uploading a bank statement CSV.</span>';
         return;
       }
 
