@@ -166,3 +166,19 @@ select:focus{border-color:var(--blue);}
 .small-link-btn{background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--blue);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;padding:5px 9px;cursor:pointer;white-space:nowrap;}
 .small-link-btn:hover{border-color:var(--blue);background:var(--blue-bg);}
 .budget-add-card{border-style:dashed;}
+
+/* CSV upload review upgrades */
+.upload-tools{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:10px;}
+.upload-review-table{overflow-x:auto;border:1px solid var(--border);border-radius:12px;}
+.upload-review-head,.upload-review-row{display:grid;grid-template-columns:42px 42px minmax(190px,1fr) 95px 150px 95px 130px;gap:8px;align-items:center;min-width:780px;}
+.upload-review-head{padding:8px 10px;border-bottom:2px solid var(--border);font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;background:var(--surface2);}
+.upload-review-row{padding:9px 10px;border-bottom:1px solid var(--border);font-size:13px;background:var(--surface);}
+.upload-review-row:last-child{border-bottom:none;}
+.upload-review-row.duplicate{background:var(--orange-bg);}
+.upload-small-select{font-size:11px;padding:5px 7px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);outline:none;font-family:'DM Sans',sans-serif;}
+.upload-mini-check{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);white-space:nowrap;}
+.upload-mini-check input,.upload-review-row input[type="checkbox"]{width:15px;height:15px;accent-color:var(--blue);}
+.upload-warning-pill,.upload-rule-pill{display:inline-flex;align-items:center;border-radius:99px;padding:3px 7px;font-size:10px;font-weight:700;white-space:nowrap;}
+.upload-warning-pill{background:var(--orange-bg);color:var(--orange);border:1px solid rgba(224,122,48,0.25);}
+.upload-rule-pill{background:var(--green-bg);color:var(--green);border:1px solid rgba(42,157,92,0.25);}
+@media(max-width:640px){.upload-review-head,.upload-review-row{grid-template-columns:38px 38px minmax(180px,1fr) 90px 140px 90px 120px;}}
