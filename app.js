@@ -295,90 +295,180 @@ async function deleteCategory(cat){
   renderCatManager(); renderCatSelect(); renderBudgetView(); showSaved();
 }
 
-// ── PDF UPLOAD & AI REVIEW ──
-async function handleStatementUpload(event){
+// ── CSV UPLOAD & RULE-BASED CATEGORISATION ──
+
+// Category matching rules — description keywords → category
+const CAT_RULES = [
+  { keywords: ['woolworths','coles','aldi','iga','harris farm','costco','butcher','bakery','seafood','deli','supermarket','grocery'], cat: 'Food & Dining' },
+  { keywords: ['uber eats','doordash','menulog','deliveroo','mcdonalds','kfc','subway','hungry jacks','dominos','pizza','burger','sushi','thai','chinese','indian','restaurant','cafe','coffee','starbucks','gloria jeans','dining','lunch','dinner','breakfast','eat'], cat: 'Food & Dining' },
+  { keywords: ['uber','ola','didi','taxi','lyft','train','bus','metro','opal','myki','ferry','tram','parking','toll','transport','transit','fuel','petrol','bp','shell','caltex','7-eleven'], cat: 'Transport' },
+  { keywords: ['netflix','spotify','apple music','disney','stan','binge','foxtel','youtube premium','amazon prime','adobe','microsoft 365','google one','icloud','dropbox','subscription','membership'], cat: 'Subscriptions' },
+  { keywords: ['doctor','gp','hospital','pharmacy','chemist','medibank','bupa','nib','ahm','dental','optometrist','physio','medical','health','clinic','medicare','pathology'], cat: 'Health & Medical' },
+  { keywords: ['electricity','gas','water','internet','telstra','optus','vodafone','tpg','aussie broadband','phone','council rates','body corporate','strata','insurance','rent','mortgage','utilities','bill'], cat: 'Utilities & Bills' },
+  { keywords: ['cinema','event','ticketek','ticketmaster','entertainment','concert','theatre','museum','gallery','sport','gym','fitness','movie'], cat: 'Entertainment' },
+  { keywords: ['amazon','ebay','kmart','target','big w','myer','david jones','zara','uniqlo','cotton on','h&m','glue','asos','the iconic','shopping','clothing','shoes','fashion','electronics','jb hi','harvey norman','apple store','officeworks'], cat: 'Shopping' },
+  { keywords: ['salary','payroll','pay','wage','income','deposit','transfer in','reimbursement','refund','cashback','interest earned','dividend'], cat: 'Other', type: 'income' },
+];
+
+function guessCategory(description, amount, type){
+  const desc = description.toLowerCase();
+  for(const rule of CAT_RULES){
+    if(rule.keywords.some(k=>desc.includes(k))){
+      return rule.cat;
+    }
+  }
+  return 'Other';
+}
+
+function guessType(description, amount){
+  const desc = description.toLowerCase();
+  const incomeKeywords = ['salary','payroll','pay','wage','income','deposit','reimbursement','refund','cashback','interest','dividend','credit'];
+  if(incomeKeywords.some(k=>desc.includes(k))) return 'income';
+  return 'expense';
+}
+
+function parseCSV(text){
+  const lines = text.split(/
+?
+/).filter(l=>l.trim());
+  if(lines.length < 2) return [];
+  
+  // Detect delimiter
+  const delim = lines[0].includes('	') ? '	' : ',';
+  
+  const parseRow = (line) => {
+    const result = [];
+    let cur = '', inQuote = false;
+    for(let i=0;i<line.length;i++){
+      const ch = line[i];
+      if(ch==='"') inQuote=!inQuote;
+      else if(ch===delim && !inQuote){ result.push(cur.trim()); cur=''; }
+      else cur+=ch;
+    }
+    result.push(cur.trim());
+    return result;
+  };
+
+  const headers = parseRow(lines[0]).map(h=>h.toLowerCase().replace(/[^a-z0-9]/g,''));
+  
+  // Find column indices — handle various bank CSV formats
+  const findCol = (...names) => {
+    for(const n of names){
+      const i = headers.findIndex(h=>h.includes(n));
+      if(i>=0) return i;
+    }
+    return -1;
+  };
+
+  const dateCol    = findCol('date','transactiondate','txdate');
+  const descCol    = findCol('description','details','narrative','merchant','memo','transactiondetails','particulars');
+  const amountCol  = findCol('amount','debit','credit','transactionamount');
+  const debitCol   = findCol('debit','withdrawal','withdrawals');
+  const creditCol  = findCol('credit','deposit','deposits');
+
+  if(dateCol<0 || descCol<0) return null; // can't parse
+
+  const txs = [];
+  for(let i=1;i<lines.length;i++){
+    const row = parseRow(lines[i]);
+    if(row.length < 2) continue;
+
+    const date    = row[dateCol]?.replace(/"/g,'').trim() || '';
+    const desc    = row[descCol]?.replace(/"/g,'').trim() || '';
+    if(!date || !desc) continue;
+
+    let amount = 0, type = 'expense';
+
+    if(amountCol>=0){
+      // Single amount column — negative = debit, positive = credit
+      const raw = parseFloat(row[amountCol]?.replace(/[$,"]/g,'') || '0');
+      amount = Math.abs(raw);
+      type = raw >= 0 ? 'income' : 'expense';
+    } else if(debitCol>=0 && creditCol>=0){
+      // Separate debit/credit columns
+      const debit  = parseFloat(row[debitCol]?.replace(/[$,"]/g,'') || '0');
+      const credit = parseFloat(row[creditCol]?.replace(/[$,"]/g,'') || '0');
+      if(credit > 0){ amount = credit; type = 'income'; }
+      else { amount = debit; type = 'expense'; }
+    }
+
+    if(amount <= 0) continue;
+
+    // Override type based on description keywords
+    const descType = guessType(desc, amount);
+    if(descType === 'income') type = 'income';
+
+    const subType = type==='income'?'income':'credit';
+
+    txs.push({
+      date: formatDate(date),
+      description: desc,
+      amount,
+      type,
+      subType,
+      category: guessCategory(desc, amount, type)
+    });
+  }
+  return txs;
+}
+
+function formatDate(raw){
+  // Try to parse various date formats and return "DD Mon"
+  try {
+    const d = new Date(raw);
+    if(!isNaN(d)) return d.toLocaleDateString('en-AU',{day:'numeric',month:'short'});
+  } catch(e){}
+  return raw;
+}
+
+function handleStatementUpload(event){
   const file=event.target.files[0];
   if(!file) return;
-  event.target.value=''; // reset so same file can be re-uploaded
+  event.target.value='';
+
+  if(!file.name.toLowerCase().endsWith('.csv')){
+    openUploadModal();
+    document.getElementById('uploadStatus').innerHTML='<span style="color:var(--pink);">⚠️ Please upload a CSV file. Download your statement as CSV from your bank app.</span>';
+    document.getElementById('uploadReviewList').innerHTML='';
+    document.getElementById('confirmUploadBtn').style.display='none';
+    return;
+  }
+
   openUploadModal();
   document.getElementById('uploadStatus').innerHTML='<span style="color:var(--blue);">📄 Reading your statement…</span>';
   document.getElementById('uploadReviewList').innerHTML='';
   document.getElementById('confirmUploadBtn').style.display='none';
 
-  try {
-    // Convert PDF to base64
-    const base64 = await fileToBase64(file);
-    const acctLabel = activeAcct==='joint'?'Joint (50/50 split)':'Personal';
-
-    const response = await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:4000,
-        messages:[{
-          role:'user',
-          content:[
-            {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
-            {type:'text',text:`Extract all transactions from this bank statement. 
-Account type: ${acctLabel}
-Available categories: ${getCategories().join(', ')}
-
-Return ONLY a JSON array, no other text, no markdown. Each item:
-{
-  "date": "DD Mon" (e.g. "3 Jan"),
-  "description": "merchant/payee name",
-  "amount": 12.50 (positive number),
-  "type": "expense" or "income",
-  "category": "best matching category from the list",
-  "subType": "credit" or "debit" or "income"
-}
-
-Rules:
-- Salary/wages/transfers in = income
-- Everything else = expense  
-- Match category as closely as possible to the available list
-- Use "Other" if nothing fits
-- Skip balance rows, opening/closing balance, fees labelled as reversals`}
-          ]
-        }]
-      })
-    });
-
-    const data = await response.json();
-    const text = data.content?.find(b=>b.type==='text')?.text || '';
-    let txs = [];
+  const reader = new FileReader();
+  reader.onload = (e) => {
     try {
-      const clean = text.replace(/```json|```/g,'').trim();
-      txs = JSON.parse(clean);
-    } catch(e){
-      document.getElementById('uploadStatus').innerHTML='<span style="color:var(--pink);">⚠️ Could not read the statement. Try a clearer PDF or screenshot.</span>';
-      return;
+      const text = e.target.result;
+      const txs = parseCSV(text);
+
+      if(txs === null){
+        document.getElementById('uploadStatus').innerHTML='<span style="color:var(--pink);">⚠️ Could not read this CSV format. Make sure you're uploading a bank statement CSV.</span>';
+        return;
+      }
+
+      if(!txs.length){
+        document.getElementById('uploadStatus').innerHTML='<span style="color:var(--muted);">No transactions found. Check the file has transaction data.</span>';
+        return;
+      }
+
+      pendingUploadTxs = txs.map((t,i)=>({...t, _id:i, acct:activeAcct, keep:true}));
+      renderUploadReview();
+      document.getElementById('uploadStatus').innerHTML=`<span style="color:var(--green);">✓ Found <strong>${txs.length} transactions</strong>. Review below — update any categories before saving.</span>`;
+      document.getElementById('confirmUploadBtn').style.display='block';
+
+    } catch(err){
+      console.error(err);
+      document.getElementById('uploadStatus').innerHTML='<span style="color:var(--pink);">⚠️ Something went wrong reading the file. Please try again.</span>';
     }
-
-    if(!txs.length){
-      document.getElementById('uploadStatus').innerHTML='<span style="color:var(--muted);">No transactions found in this file.</span>';
-      return;
-    }
-
-    pendingUploadTxs = txs.map((t,i)=>({...t, _id:i, acct:activeAcct, keep:true}));
-    renderUploadReview();
-    document.getElementById('uploadStatus').innerHTML=`<span style="color:var(--green);">✓ Found <strong>${txs.length} transactions</strong>. Review below — edit categories or uncheck to skip.</span>`;
-    document.getElementById('confirmUploadBtn').style.display='block';
-
-  } catch(e){
-    console.error(e);
-    document.getElementById('uploadStatus').innerHTML='<span style="color:var(--pink);">⚠️ Something went wrong. Please try again.</span>';
-  }
-}
-
-function fileToBase64(file){
-  return new Promise((res,rej)=>{
-    const r=new FileReader();
-    r.onload=()=>res(r.result.split(',')[1]);
-    r.onerror=()=>rej(new Error('Read failed'));
-    r.readAsDataURL(file);
-  });
+  };
+  reader.onerror = () => {
+    document.getElementById('uploadStatus').innerHTML='<span style="color:var(--pink);">⚠️ Could not read the file. Please try again.</span>';
+  };
+  reader.readAsText(file);
 }
 
 function renderUploadReview(){
