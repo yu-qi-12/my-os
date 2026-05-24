@@ -172,7 +172,7 @@
   <div class="card budget-add-card" id="budgetAddCategoryCard" style="display:none;margin-bottom:16px;">
     <div class="card-label">Add category</div>
     <div class="add-row" style="margin-top:0;">
-      <input class="add-input" id="newCatInput" placeholder="New category name…" onkeydown="if(event.key==='Enter') addCategory()">
+      <input class="add-input" id="newCatInput" placeholder="New category name…" oninput="checkCategoryWarning()" onkeydown="if(event.key==='Enter') addCategory()">
       <select id="newCatType" class="styled-select">
         <option value="expense">Expense</option>
         <option value="income">Income</option>
@@ -181,7 +181,21 @@
       <input class="number-input" id="newCatBudget" placeholder="Monthly target" type="number" min="0" step="10">
       <button class="add-btn" onclick="addCategory()">+ Add</button>
     </div>
+    <div id="newCatWarning" class="category-warning" style="display:none;"></div>
   </div>
+
+    <div class="card" id="uploadPanel" style="display:none;margin-bottom:16px;">
+      <div class="card-label">Upload CSV statement</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+        <button class="upload-acct-btn active" onclick="selectUploadAcct(this,'personal-credit')">💳 Personal Credit</button>
+        <button class="upload-acct-btn" onclick="selectUploadAcct(this,'debit')">💳 Debit</button>
+        <button class="upload-acct-btn" onclick="selectUploadAcct(this,'joint')">🤝 Joint (÷2)</button>
+      </div>
+      <input type="file" id="statementFile" accept=".csv" style="display:none;" onchange="handleStatementUpload(event)">
+      <button class="add-btn" onclick="document.getElementById('statementFile').click()">Choose CSV file</button>
+      <div class="card-sub" style="margin-top:8px;">Joint transactions are counted as 50% in your cover and reports.</div>
+    </div>
+
 
   <div id="addTxForm" class="card" style="display:none;margin-bottom:16px;">
     <div class="card-label">New transaction</div>
@@ -199,18 +213,6 @@
     </div>
   </div>
 
-
-    <div class="card" id="uploadPanel" style="display:none;margin-bottom:16px;">
-      <div class="card-label">Upload CSV statement</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-        <button class="upload-acct-btn active" onclick="selectUploadAcct(this,'personal-credit')">💳 Personal Credit</button>
-        <button class="upload-acct-btn" onclick="selectUploadAcct(this,'debit')">💳 Debit</button>
-        <button class="upload-acct-btn" onclick="selectUploadAcct(this,'joint')">🤝 Joint (÷2)</button>
-      </div>
-      <input type="file" id="statementFile" accept=".csv" style="display:none;" onchange="handleStatementUpload(event)">
-      <button class="add-btn" onclick="document.getElementById('statementFile').click()">Choose CSV file</button>
-      <div class="card-sub" style="margin-top:8px;">Joint transactions are counted as 50% in your cover and reports.</div>
-    </div>
 
   <div class="view active" id="fin-view-yearly">
     <div class="grid-3">
