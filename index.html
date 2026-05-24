@@ -173,7 +173,12 @@
     <div class="card-label">Add category</div>
     <div class="add-row" style="margin-top:0;">
       <input class="add-input" id="newCatInput" placeholder="New category name…" onkeydown="if(event.key==='Enter') addCategory()">
-      <input class="number-input" id="newCatBudget" placeholder="Budget" type="number" min="0" step="10">
+      <select id="newCatType" class="styled-select">
+        <option value="expense">Expense</option>
+        <option value="income">Income</option>
+        <option value="asset">Asset / saving</option>
+      </select>
+      <input class="number-input" id="newCatBudget" placeholder="Monthly target" type="number" min="0" step="10">
       <button class="add-btn" onclick="addCategory()">+ Add</button>
     </div>
   </div>
@@ -193,6 +198,19 @@
       <button class="add-btn" onclick="addTransaction()">Save</button>
     </div>
   </div>
+
+
+    <div class="card" id="uploadPanel" style="display:none;margin-bottom:16px;">
+      <div class="card-label">Upload CSV statement</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+        <button class="upload-acct-btn active" onclick="selectUploadAcct(this,'personal-credit')">💳 Personal Credit</button>
+        <button class="upload-acct-btn" onclick="selectUploadAcct(this,'debit')">💳 Debit</button>
+        <button class="upload-acct-btn" onclick="selectUploadAcct(this,'joint')">🤝 Joint (÷2)</button>
+      </div>
+      <input type="file" id="statementFile" accept=".csv" style="display:none;" onchange="handleStatementUpload(event)">
+      <button class="add-btn" onclick="document.getElementById('statementFile').click()">Choose CSV file</button>
+      <div class="card-sub" style="margin-top:8px;">Joint transactions are counted as 50% in your cover and reports.</div>
+    </div>
 
   <div class="view active" id="fin-view-yearly">
     <div class="grid-3">
@@ -275,30 +293,26 @@
             <button id="mv-review-all-btn" class="small-link-btn" onclick="toggleMonthlyTxList()" style="display:none;">Review all</button>
           </div>
         </div>
+        <div class="monthly-search-wrap">
+          <input class="finance-search-input" id="mvTxSearch" placeholder="Search transactions…" oninput="setMonthlyTxSearch(this.value)">
+        </div>
         <div id="mv-txlist" class="monthly-tx-list"></div>
       </div>
     </div>
     <div class="insight" id="mv-insight" style="display:none;margin-bottom:16px;"></div>
 
-    <div class="card" id="uploadPanel" style="display:none;margin-bottom:16px;">
-      <div class="card-label">Upload CSV statement</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-        <button class="upload-acct-btn active" onclick="selectUploadAcct(this,'personal-credit')">💳 Personal Credit</button>
-        <button class="upload-acct-btn" onclick="selectUploadAcct(this,'debit')">💳 Debit</button>
-        <button class="upload-acct-btn" onclick="selectUploadAcct(this,'joint')">🤝 Joint (÷2)</button>
-      </div>
-      <input type="file" id="statementFile" accept=".csv" style="display:none;" onchange="handleStatementUpload(event)">
-      <button class="add-btn" onclick="document.getElementById('statementFile').click()">Choose CSV file</button>
-      <div class="card-sub" style="margin-top:8px;">Joint transactions are counted as 50% in your cover and reports.</div>
-    </div>
 
   </div>
 
   <div class="view" id="fin-view-budget" style="display:none;">
-    <div class="grid-2">
+    <div class="grid-3 budget-grid">
       <div class="card">
         <div class="card-label">Spending budgets</div>
         <div id="budgetExpRows"></div>
+      </div>
+      <div class="card">
+        <div class="card-label">Income targets</div>
+        <div id="budgetIncomeRows"></div>
       </div>
       <div class="card">
         <div class="card-label">Asset contribution targets</div>
@@ -320,6 +334,9 @@
       </div>
       <div id="uploadStatus" style="margin-bottom:16px;font-size:13px;color:var(--muted);"></div>
       <div id="uploadSkipNote" style="display:none;font-size:12px;color:var(--muted);margin-bottom:8px;">Tip: uncheck any rows you do not want to import.</div>
+      <div class="upload-search-wrap" id="uploadSearchWrap" style="display:none;">
+        <input class="finance-search-input" id="uploadSearchInput" placeholder="Search and highlight transactions… e.g. public" oninput="setUploadSearch(this.value)">
+      </div>
       <div id="uploadReviewList"></div>
       <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;">
         <button class="add-btn" id="confirmUploadBtn" onclick="confirmUpload()" style="display:none;">✓ Save selected transactions</button>
