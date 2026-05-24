@@ -1079,6 +1079,7 @@ let mvAcctFilter = 'all';
 let yrViewYear = todayObj.getFullYear();
 let uploadAcct = 'personal-credit';
 let pendingUploadTxs = [];
+let merchantRules = loadMerchantRules();
 let monthlyTxExpanded = false;
 
 // ── Helpers ──
@@ -1531,6 +1532,7 @@ function handleStatementUpload(event){
   if(!file.name.toLowerCase().endsWith('.csv')){
     openUploadModal();
     document.getElementById('uploadStatus').innerHTML='<span style="color:var(--pink);">⚠️ Please upload a CSV file.</span>';
+    document.getElementById('uploadReviewList').innerHTML='';
     document.getElementById('confirmUploadBtn').style.display='none';
     return;
   }
@@ -1551,15 +1553,26 @@ function handleStatementUpload(event){
         document.getElementById('uploadStatus').innerHTML='<span style="color:var(--muted);">No transactions found in this file.</span>';
         return;
       }
-      pendingUploadTxs=txs.map((t,i)=>({...t,_id:i,acct:uploadAcct,keep:true}));
+      pendingUploadTxs=txs.map((t,i)=>{
+        const row={...t,_id:i,acct:uploadAcct,keep:true,selected:false,rememberRule:false};
+        const rule=merchantRules[getMerchantKey(row.description)];
+        if(rule && rule.category){
+          row.category=rule.category;
+          row.ruleApplied=true;
+        }
+        row.duplicate=isPotentialDuplicate(row);
+        return row;
+      });
       renderUploadReview();
       const acctLabel=ACCT_LABELS[uploadAcct]||uploadAcct;
       const isJoint=uploadAcct==='joint';
+      const duplicateCount=pendingUploadTxs.filter(t=>t.duplicate).length;
+      const ruleCount=pendingUploadTxs.filter(t=>t.ruleApplied).length;
       document.getElementById('uploadStatus').innerHTML=
         `<div style="background:var(--green-bg);border:1px solid var(--green);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--green);margin-bottom:8px;">
           ✓ Found <strong>${txs.length} transactions</strong> — all tagged to <strong>${acctLabel}</strong>${isJoint?' · amounts will be halved (÷2)':''}.
         </div>
-        <span style="font-size:12px;color:var(--muted);">Fix any categories below, uncheck rows to skip, then save.</span>`;
+        <span style="font-size:12px;color:var(--muted);">Review all rows, batch edit where useful, and tick “remember” for merchants you want the system to learn.${ruleCount?` ${ruleCount} matched saved merchant rule${ruleCount>1?'s':''}.`:''}${duplicateCount?` ${duplicateCount} possible duplicate${duplicateCount>1?'s':''} flagged.`:''}</span>`;
       document.getElementById('confirmUploadBtn').style.display='block';
       document.getElementById('uploadSkipNote').style.display='block';
     }catch(err){
@@ -1576,22 +1589,45 @@ function handleStatementUpload(event){
 function renderUploadReview(){
   const cats=getCategories();
   const list=document.getElementById('uploadReviewList');
+  const selectedCount=pendingUploadTxs.filter(t=>t.selected).length;
+  const duplicateCount=pendingUploadTxs.filter(t=>t.duplicate).length;
+  const ruleCount=pendingUploadTxs.filter(t=>t.ruleApplied).length;
   list.innerHTML=`
-    <div style="display:grid;grid-template-columns:28px 1fr 95px 120px;gap:8px;padding:7px 0;border-bottom:2px solid var(--border);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">
-      <div></div><div>Description · Date</div><div style="text-align:right;">Amount</div><div>Category</div>
-    </div>
-    ${pendingUploadTxs.map(t=>`
-    <div style="display:grid;grid-template-columns:28px 1fr 95px 120px;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);align-items:center;font-size:13px;">
-      <input type="checkbox" ${t.keep?'checked':''} onchange="toggleUploadRow(${t._id},this.checked)" style="width:16px;height:16px;accent-color:var(--blue);">
-      <div>
-        <div style="font-weight:500;">${t.description}</div>
-        <div style="font-size:11px;color:var(--muted);">${t.date}</div>
+    <div class="upload-tools">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <label class="upload-mini-check"><input type="checkbox" onchange="toggleAllUploadSelect(this.checked)" ${selectedCount&&selectedCount===pendingUploadTxs.length?'checked':''}> Select all</label>
+        <span class="card-sub">${selectedCount} selected</span>
+        <select id="uploadBatchCat" class="upload-small-select">
+          ${cats.map(c=>`<option>${c}</option>`).join('')}
+        </select>
+        <button class="small-link-btn" onclick="applyUploadBatchCategory()">Apply category</button>
+        <button class="small-link-btn" onclick="clearUploadSelection()">Clear</button>
       </div>
-      <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;text-align:right;color:${t.type==='income'?'var(--green)':'var(--pink)'};">${t.type==='income'?'+':'-'}$${parseFloat(t.amount).toFixed(2)}</div>
-      <select onchange="updateUploadRow(${t._id},'category',this.value)" style="font-size:11px;padding:4px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none;">
-        ${cats.map(c=>`<option ${c===t.category?'selected':''}>${c}</option>`).join('')}
-      </select>
-    </div>`).join('')}`;
+      <div class="card-sub">${duplicateCount?`⚠️ ${duplicateCount} possible duplicate${duplicateCount>1?'s':''}`:'No duplicates flagged'}${ruleCount?` · ${ruleCount} rule match${ruleCount>1?'es':''}`:''}</div>
+    </div>
+    <div class="upload-review-table">
+      <div class="upload-review-head">
+        <div>Edit</div><div>Save</div><div>Description · Date</div><div style="text-align:right;">Amount</div><div>Category</div><div>Remember</div><div>Notes</div>
+      </div>
+      ${pendingUploadTxs.map(t=>`
+      <div class="upload-review-row ${t.duplicate?'duplicate':''}">
+        <input type="checkbox" ${t.selected?'checked':''} onchange="toggleUploadSelect(${t._id},this.checked)">
+        <input type="checkbox" ${t.keep?'checked':''} onchange="toggleUploadRow(${t._id},this.checked)">
+        <div>
+          <div style="font-weight:500;">${escapeHTML(t.description)}</div>
+          <div style="font-size:11px;color:var(--muted);">${escapeHTML(t.date)}</div>
+        </div>
+        <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;text-align:right;color:${t.type==='income'?'var(--green)':'var(--pink)'};">${t.type==='income'?'+':'-'}$${parseFloat(t.amount).toFixed(2)}</div>
+        <select onchange="updateUploadRow(${t._id},'category',this.value)" class="upload-small-select">
+          ${cats.map(c=>`<option ${c===t.category?'selected':''}>${c}</option>`).join('')}
+        </select>
+        <label class="upload-mini-check" title="Save this merchant/category rule for future uploads"><input type="checkbox" ${t.rememberRule?'checked':''} onchange="updateUploadRow(${t._id},'rememberRule',this.checked)"> Rule</label>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;">
+          ${t.duplicate?'<span class="upload-warning-pill">Possible duplicate</span>':''}
+          ${t.ruleApplied?'<span class="upload-rule-pill">Rule matched</span>':''}
+        </div>
+      </div>`).join('')}
+    </div>`;
 }
 
 function toggleUploadRow(id,checked){
@@ -1599,17 +1635,57 @@ function toggleUploadRow(id,checked){
   if(t) t.keep=checked;
 }
 
+function toggleUploadSelect(id,checked){
+  const t=pendingUploadTxs.find(t=>t._id===id);
+  if(t) t.selected=checked;
+  renderUploadReview();
+}
+
+function toggleAllUploadSelect(checked){
+  pendingUploadTxs.forEach(t=>t.selected=checked);
+  renderUploadReview();
+}
+
+function clearUploadSelection(){
+  pendingUploadTxs.forEach(t=>t.selected=false);
+  renderUploadReview();
+}
+
+function applyUploadBatchCategory(){
+  const sel=document.getElementById('uploadBatchCat');
+  const cat=sel ? sel.value : '';
+  if(!cat) return;
+  pendingUploadTxs.forEach(t=>{
+    if(t.selected){
+      t.category=cat;
+      t.rememberRule=true;
+      t.ruleApplied=false;
+    }
+  });
+  renderUploadReview();
+}
+
 function updateUploadRow(id,field,val){
   const t=pendingUploadTxs.find(t=>t._id===id);
-  if(t) t[field]=val;
+  if(!t) return;
+  t[field]=val;
+  if(field==='category'){
+    t.rememberRule=true;
+    t.ruleApplied=false;
+    renderUploadReview();
+  }
 }
 
 async function confirmUpload(){
   const btn=document.getElementById('confirmUploadBtn');
   btn.textContent='Saving…'; btn.disabled=true;
   const toSave=pendingUploadTxs.filter(t=>t.keep);
-  let saved=0,failed=0;
+  let saved=0,failed=0,rulesSaved=0;
   for(const t of toSave){
+    if(t.rememberRule){
+      saveMerchantRule(t.description,t.category);
+      rulesSaved++;
+    }
     const id=Date.now()*1000+saved;
     const subType=t.type==='income'?'income':(t.acct==='debit'?'debit':'credit');
     const mk=monthKeyFromDate(t.date);
@@ -1631,11 +1707,64 @@ async function confirmUpload(){
   }
   closeUploadModal();
   if(failed>0) alert(`${saved} saved. ${failed} failed — please try again.`);
+  else if(rulesSaved>0) console.log(`${rulesSaved} merchant rule${rulesSaved>1?'s':''} saved.`);
   renderTotalCover(); renderMonthly(); renderYearly(); updateOverview(); showSaved();
 }
 
+function loadMerchantRules(){
+  try{return JSON.parse(localStorage.getItem('myos_merchant_rules')||'{}');}
+  catch(e){return {};}
+}
+
+function persistMerchantRules(){
+  localStorage.setItem('myos_merchant_rules',JSON.stringify(merchantRules));
+}
+
+function saveMerchantRule(description,category){
+  const key=getMerchantKey(description);
+  if(!key||!category) return;
+  merchantRules[key]={category,sample:description,updatedAt:new Date().toISOString()};
+  persistMerchantRules();
+}
+
+function getMerchantKey(description){
+  return String(description||'')
+    .toLowerCase()
+    .replace(/paypal \*/g,'paypal ')
+    .replace(/\b(pos|eftpos|visa|mastercard|card|purchase|debit|credit|direct debit|payment)\b/g,' ')
+    .replace(/\b(au|aus|australia|sydney|melbourne|brisbane|nsw|vic|qld|pty|ltd)\b/g,' ')
+    .replace(/[0-9]+/g,' ')
+    .replace(/[^a-z& ]/g,' ')
+    .replace(/\s+/g,' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean)
+    .slice(0,4)
+    .join(' ');
+}
+
+function txComparableDescription(description){
+  return String(description||'').toLowerCase().replace(/\s+/g,' ').trim();
+}
+
+function isPotentialDuplicate(t){
+  const amt=parseFloat(t.amount).toFixed(2);
+  const desc=txComparableDescription(t.description);
+  return state.transactions.some(existing=>{
+    const exAmt=parseFloat(existing.amount||0).toFixed(2);
+    const exDesc=txComparableDescription(existing.description||existing.text||'');
+    return existing.date===t.date && existing.acct===t.acct && exAmt===amt && exDesc===desc;
+  });
+}
+
+function escapeHTML(value){
+  return String(value??'').replace(/[&<>'"]/g,ch=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'
+  }[ch]));
+}
+
 function openUploadModal(){document.getElementById('uploadModal').style.display='block';document.body.style.overflow='hidden';}
-function closeUploadModal(){document.getElementById('uploadModal').style.display='none';document.body.style.overflow='';pendingUploadTxs=[];}
+function closeUploadModal(){document.getElementById('uploadModal').style.display='none';document.body.style.overflow='';pendingUploadTxs=[];document.getElementById('confirmUploadBtn').textContent='✓ Save selected transactions';document.getElementById('confirmUploadBtn').disabled=false;}
 
 // ── BUDGET & CATEGORIES ──
 function renderBudgetView(){
