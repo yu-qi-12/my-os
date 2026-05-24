@@ -205,6 +205,9 @@ function calNext(){calView.month++;if(calView.month>11){calView.month=0;calView.
 
 // ─── FINANCE ───
 let activeAcct='personal', activeSubAcct='credit';
+// Month navigation — default to current month
+let viewYear = new Date().getFullYear();
+let viewMonth = new Date().getMonth(); // 0-indexed
 function switchAcct(acct){
   activeAcct=acct;
   document.querySelectorAll('.acct-tab').forEach((t,i)=>t.classList.toggle('active',['personal','joint','budget'][i]===acct));
@@ -574,27 +577,48 @@ function renderTotalCover(){
   netEl.textContent=(net>=0?'$':'-$')+Math.abs(net).toFixed(2);
   netEl.style.color=net>=0?'var(--green)':'var(--pink)';
 }
+function finPrevMonth(){ viewMonth--; if(viewMonth<0){viewMonth=11;viewYear--;} renderFinance(); }
+function finNextMonth(){
+  const now=new Date();
+  if(viewYear===now.getFullYear()&&viewMonth===now.getMonth()) return; // can't go past current month
+  viewMonth++; if(viewMonth>11){viewMonth=0;viewYear++;} renderFinance();
+}
+
 function renderFinance(){
   const isJoint=activeAcct==='joint';
+  const mk=monthKey(viewYear,viewMonth);
+  const now=new Date();
+  const isCurrentMonth=viewYear===now.getFullYear()&&viewMonth===now.getMonth();
+
+  // Update month nav display
+  const monthNavEl=document.getElementById('finMonthNav');
+  if(monthNavEl){
+    monthNavEl.textContent=`${MONTH_NAMES[viewMonth]} ${viewYear}`;
+  }
+  // Disable next button if current month
+  const nextBtn=document.getElementById('finNextBtn');
+  if(nextBtn) nextBtn.style.opacity=isCurrentMonth?'0.3':'1';
+
   let txs;
-  if(isJoint) txs=state.transactions.filter(t=>t.acct==='joint');
-  else if(activeSubAcct==='income') txs=state.transactions.filter(t=>t.acct==='personal'&&t.type==='income');
-  else txs=state.transactions.filter(t=>t.acct==='personal'&&t.subType===activeSubAcct);
-  const allTxs=[...state.transactions.filter(t=>t.acct==='personal'),...state.transactions.filter(t=>t.acct==='joint')];
-  const income=allTxs.filter(t=>t.type==='income').reduce((s,t)=>s+effectiveAmount(t),0);
-  const expense=allTxs.filter(t=>t.type==='expense').reduce((s,t)=>s+effectiveAmount(t),0);
+  if(isJoint) txs=state.transactions.filter(t=>t.acct==='joint'&&t.monthKey===mk);
+  else if(activeSubAcct==='income') txs=state.transactions.filter(t=>t.acct==='personal'&&t.type==='income'&&t.monthKey===mk);
+  else txs=state.transactions.filter(t=>t.acct==='personal'&&t.subType===activeSubAcct&&t.monthKey===mk);
+
+  // Summary cards show selected month across all accounts
+  const allMkTxs=state.transactions.filter(t=>t.monthKey===mk);
+  const income=allMkTxs.filter(t=>t.type==='income').reduce((s,t)=>s+effectiveAmount(t),0);
+  const expense=allMkTxs.filter(t=>t.type==='expense').reduce((s,t)=>s+effectiveAmount(t),0);
   const net=income-expense;
   document.getElementById('fin-income').textContent='$'+income.toFixed(2);
-  document.getElementById('fin-income-sub').textContent='all accounts';
+  document.getElementById('fin-income-sub').textContent=`${MONTH_SHORT[viewMonth]} — all accounts`;
   document.getElementById('fin-expense').textContent='$'+expense.toFixed(2);
   document.getElementById('fin-expense-sub').textContent='personal + 50% joint';
   const netEl=document.getElementById('fin-net');
   netEl.textContent=(net>=0?'$':'-$')+Math.abs(net).toFixed(2);
   netEl.style.color=net>=0?'var(--green)':'var(--pink)';
   document.getElementById('fin-net-sub').textContent='combined net';
-  const mk=monthKey(todayObj.getFullYear(),todayObj.getMonth());
-  document.getElementById('fin-cat-month').textContent=MONTH_SHORT[todayObj.getMonth()];
-  const expenses=txs.filter(t=>t.type==='expense'&&t.monthKey===mk);
+  document.getElementById('fin-cat-month').textContent=MONTH_SHORT[viewMonth];
+  const expenses=txs.filter(t=>t.type==='expense');
   const catEl=document.getElementById('fin-cat-breakdown');
   if(!expenses.length){catEl.innerHTML='<div style="color:var(--muted);font-size:13px;">No expenses this month.</div>';}
   else{
@@ -603,18 +627,24 @@ function renderFinance(){
     const maxCat=byCat[0]?.sum||1;
     catEl.innerHTML=byCat.map(c=>`<div class="cat-row"><div class="cat-dot" style="background:${c.color}"></div><div class="cat-name">${c.cat}</div><div class="cat-bar-wrap"><div class="cat-bar-fill" style="width:${Math.round((c.sum/maxCat)*100)}%;background:${c.color}"></div></div><div class="cat-amount" style="color:${c.color}">$${c.sum.toFixed(0)}${isJoint?'<span class="split-note">½</span>':''}</div></div>`).join('');
   }
-  const now2=new Date();const lastDate=new Date(now2.getFullYear(),now2.getMonth()-1,1);
+  const lastDate=new Date(viewYear,viewMonth-1,1);
   const lastKey=monthKey(lastDate.getFullYear(),lastDate.getMonth());
-  const mn=MONTH_SHORT[now2.getMonth()],lmn=MONTH_SHORT[lastDate.getMonth()];
-  const thisE=txs.filter(t=>t.type==='expense'&&t.monthKey===mk).reduce((s,t)=>s+effectiveAmount(t),0);
-  const lastE=txs.filter(t=>t.type==='expense'&&t.monthKey===lastKey).reduce((s,t)=>s+effectiveAmount(t),0);
+  const mn=MONTH_SHORT[viewMonth],lmn=MONTH_SHORT[lastDate.getMonth()];
+  const thisE=txs.filter(t=>t.type==='expense').reduce((s,t)=>s+effectiveAmount(t),0);
+  const lastMkTxs=state.transactions.filter(t=>t.monthKey===lastKey&&(isJoint?t.acct==='joint':t.acct==='personal'));
+  const lastE=lastMkTxs.filter(t=>t.type==='expense').reduce((s,t)=>s+effectiveAmount(t),0);
   const diff=thisE-lastE;
   document.getElementById('fin-monthly-review').innerHTML=`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      <button onclick="finPrevMonth()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:14px;flex-shrink:0;">‹</button>
+      <span style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;flex:1;text-align:center;" id="finMonthNav">${mn} ${viewYear}</span>
+      <button id="finNextBtn" onclick="finNextMonth()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:14px;flex-shrink:0;">›</button>
+    </div>
     <div class="stat-row" style="margin-bottom:10px;">
       <div class="stat-box"><div class="stat-box-label">${mn} spend</div><div class="stat-box-val" style="color:var(--pink);font-size:18px;">$${thisE.toFixed(0)}</div></div>
       <div class="stat-box"><div class="stat-box-label">${lmn} spend</div><div class="stat-box-val" style="color:var(--muted);font-size:18px;">$${lastE.toFixed(0)}</div></div>
     </div>
-    <div class="insight" style="margin-top:0;">${thisE===0?'<strong>No expenses logged yet.</strong>':diff>0?`<strong>Up $${diff.toFixed(0)} vs ${lmn}.</strong>`:diff<0?`<strong>Down $${Math.abs(diff).toFixed(0)} vs ${lmn}.</strong> Good.`:`<strong>Same as ${lmn}.</strong>`}</div>`;
+    <div class="insight" style="margin-top:0;">${thisE===0?'<strong>No expenses logged yet for '+mn+'.</strong>':diff>0?'<strong>Up $'+diff.toFixed(0)+' vs '+lmn+'.</strong>':diff<0?'<strong>Down $'+Math.abs(diff).toFixed(0)+' vs '+lmn+'.</strong> Good.':'<strong>Same as '+lmn+'.</strong>'}</div>`;
   const list=document.getElementById('transactionList');
   if(!txs.length){list.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px 0;">No transactions yet.</div>';return;}
   list.innerHTML=txs.slice(0,50).map(t=>{
@@ -629,7 +659,7 @@ function renderFinance(){
       <div style="display:flex;align-items:center;gap:8px;">
         <div class="amount ${t.type}">${t.type==='income'?'+':'-'}$${eff.toFixed(2)}</div>
         ${t.acct==='joint'?`<div style="font-size:10px;color:var(--muted);">total $${t.amount.toFixed(2)}</div>`:''}
-        <button onclick="openEditTx(${t.id})" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;font-size:11px;padding:3px 8px;transition:all 0.2s;" onmouseover="this.style.borderColor='var(--blue)';this.style.color='var(--blue)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">Edit</button>
+        <button data-txid="${t.id}" onclick="openEditTx(this.dataset.txid)" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;font-size:11px;padding:3px 8px;transition:all 0.2s;" onmouseover="this.style.borderColor='var(--blue)';this.style.color='var(--blue)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">Edit</button>
         <button class="del-btn" onclick="deleteTransaction(${t.id})">×</button>
       </div>
     </div>`;
