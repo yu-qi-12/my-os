@@ -617,16 +617,21 @@ function renderFinance(){
     <div class="insight" style="margin-top:0;">${thisE===0?'<strong>No expenses logged yet.</strong>':diff>0?`<strong>Up $${diff.toFixed(0)} vs ${lmn}.</strong>`:diff<0?`<strong>Down $${Math.abs(diff).toFixed(0)} vs ${lmn}.</strong> Good.`:`<strong>Same as ${lmn}.</strong>`}</div>`;
   const list=document.getElementById('transactionList');
   if(!txs.length){list.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px 0;">No transactions yet.</div>';return;}
-  list.innerHTML=txs.slice(0,15).map(t=>{
+  list.innerHTML=txs.slice(0,50).map(t=>{
     const desc=t.description||t.desc||t.text||'';
     const eff=effectiveAmount(t);
-    return `<div class="finance-row">
-      <div style="flex:1;"><div>${desc}${t.acct==='joint'?'<span class="split-note">½</span>':''}</div><div class="cat">${t.cat} · ${t.date}</div></div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin-right:8px;">
+    const cats=getCategories();
+    return `<div class="finance-row" id="txrow_${t.id}">
+      <div style="flex:1;">
+        <div style="font-weight:500;">${desc}${t.acct==='joint'?'<span class="split-note">½</span>':''}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">${t.cat} · ${t.date}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
         <div class="amount ${t.type}">${t.type==='income'?'+':'-'}$${eff.toFixed(2)}</div>
         ${t.acct==='joint'?`<div style="font-size:10px;color:var(--muted);">total $${t.amount.toFixed(2)}</div>`:''}
+        <button onclick="openEditTx(${t.id})" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;font-size:11px;padding:3px 8px;transition:all 0.2s;" onmouseover="this.style.borderColor='var(--blue)';this.style.color='var(--blue)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">Edit</button>
+        <button class="del-btn" onclick="deleteTransaction(${t.id})">×</button>
       </div>
-      <button class="del-btn" onclick="deleteTransaction(${t.id})">×</button>
     </div>`;
   }).join('');
 }
