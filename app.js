@@ -1079,6 +1079,7 @@ let mvAcctFilter = 'all';
 let yrViewYear = todayObj.getFullYear();
 let uploadAcct = 'personal-credit';
 let pendingUploadTxs = [];
+let monthlyTxExpanded = false;
 
 // ── Helpers ──
 function effectiveAmount(t){ return t.acct==='joint'?t.amount*0.5:t.amount; }
@@ -1099,6 +1100,18 @@ function switchFinTab(tab){
     const btn=document.getElementById('ftab-'+t);
     if(btn) btn.classList.toggle('active',t===tab);
   });
+
+  const monthlyActions=document.getElementById('monthlyActionButtons');
+  if(monthlyActions) monthlyActions.style.display=tab==='monthly'?'flex':'none';
+  const budgetAdd=document.getElementById('budgetAddCategoryCard');
+  if(budgetAdd) budgetAdd.style.display=tab==='budget'?'block':'none';
+
+  // Keep transaction/import controls contextual to Monthly only.
+  const addForm=document.getElementById('addTxForm');
+  if(addForm && tab!=='monthly') addForm.style.display='none';
+  const uploadPanel=document.getElementById('uploadPanel');
+  if(uploadPanel && tab!=='monthly') uploadPanel.style.display='none';
+
   if(tab==='yearly') renderYearly();
   if(tab==='monthly') renderMonthly();
   if(tab==='budget') renderBudgetView();
@@ -1366,11 +1379,20 @@ function mvNext(){
 
 function mvFilter(acct, btn){
   mvAcctFilter=acct;
+  monthlyTxExpanded=false;
   document.querySelectorAll('.mv-filter-btn').forEach(b=>{
     b.style.background='var(--surface2)'; b.style.borderColor='var(--border)'; b.style.color='var(--muted)';
   });
   btn.style.background='var(--blue)'; btn.style.borderColor='var(--blue)'; btn.style.color='#fff';
   renderMonthly();
+}
+
+function toggleMonthlyTxList(){
+  monthlyTxExpanded=!monthlyTxExpanded;
+  const list=document.getElementById('mv-txlist');
+  const btn=document.getElementById('mv-review-all-btn');
+  if(list) list.classList.toggle('expanded', monthlyTxExpanded);
+  if(btn) btn.textContent=monthlyTxExpanded?'Collapse':'Review all';
 }
 
 function renderMonthly(){
@@ -1440,6 +1462,12 @@ function renderMonthly(){
   // Transaction list
   document.getElementById('mv-tx-count').textContent=filtered.length+' transaction'+(filtered.length!==1?'s':'');
   const txEl=document.getElementById('mv-txlist');
+  const reviewBtn=document.getElementById('mv-review-all-btn');
+  if(txEl) txEl.classList.toggle('expanded', monthlyTxExpanded);
+  if(reviewBtn){
+    reviewBtn.style.display=filtered.length>5?'inline-flex':'none';
+    reviewBtn.textContent=monthlyTxExpanded?'Collapse':'Review all';
+  }
   txEl.innerHTML=filtered.length===0
     ?'<div style="color:var(--muted);font-size:13px;padding:8px 0;">No transactions for this selection.</div>'
     :[...filtered].sort((a,b)=>b.id-a.id).slice(0,50).map(t=>{
