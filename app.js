@@ -15,10 +15,37 @@ const MONTH_NAMES = ['January','February','March','April','May','June','July','A
 const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const PIANO_GOAL = 90;
 const bookColors = ['var(--green)','var(--blue)','var(--orange)','var(--pink)','var(--purple)'];
-// Categories — loaded from state, with defaults
-const DEFAULT_CATEGORIES = ['Food & Dining','Transport','Health & Medical','Entertainment','Utilities & Bills','Shopping','Subscriptions','Other'];
+// Categories — loaded from state, with sensible defaults. Users can add/delete their own.
+const DEFAULT_EXPENSE_CATEGORIES = ['Food & Dining','Transport','Health & Medical','Entertainment','Utilities & Bills','Shopping','Subscriptions','Other'];
+const DEFAULT_INCOME_CATEGORIES = ['Salary','Bonus','Refund','Reimbursement','Interest','Dividend'];
+const DEFAULT_ASSET_CATEGORIES = ['Saving','ETF','Super'];
+const DEFAULT_CATEGORIES = [...DEFAULT_EXPENSE_CATEGORIES, ...DEFAULT_INCOME_CATEGORIES, ...DEFAULT_ASSET_CATEGORIES];
+const DEFAULT_CATEGORY_TYPES = Object.fromEntries([
+  ...DEFAULT_EXPENSE_CATEGORIES.map(c=>[c,'expense']),
+  ...DEFAULT_INCOME_CATEGORIES.map(c=>[c,'income']),
+  ...DEFAULT_ASSET_CATEGORIES.map(c=>[c,'asset'])
+]);
 const CAT_COLOR_PALETTE = ['var(--green)','var(--blue)','var(--orange)','var(--pink)','var(--purple)','#2a9d8f','#e9c46a','var(--muted)','#e76f51','#457b9d','#a8dadc','#6d6875'];
-function getCategories(){ return state.categories && state.categories.length ? state.categories : [...DEFAULT_CATEGORIES]; }
+const CATEGORY_TYPE_KEY = 'my-os-category-types';
+let categoryTypes = loadCategoryTypes();
+function loadCategoryTypes(){
+  try { return {...DEFAULT_CATEGORY_TYPES, ...(JSON.parse(localStorage.getItem(CATEGORY_TYPE_KEY)||'{}'))}; }
+  catch(e){ return {...DEFAULT_CATEGORY_TYPES}; }
+}
+function saveCategoryTypes(){ localStorage.setItem(CATEGORY_TYPE_KEY, JSON.stringify(categoryTypes)); }
+function getCategories(){
+  const base = [...(state.categories||[]), ...DEFAULT_CATEGORIES];
+  (state.transactions||[]).forEach(t=>{ if(t.cat) base.push(t.cat); });
+  Object.keys(state.budgets||{}).forEach(c=>base.push(c));
+  return [...new Set(base.filter(Boolean))];
+}
+function getCategoryType(cat){
+  if(categoryTypes[cat]) return categoryTypes[cat];
+  if((state.transactions||[]).some(t=>t.cat===cat&&t.type==='income')) return 'income';
+  return 'expense';
+}
+function setCategoryType(cat,type){ categoryTypes[cat]=type; saveCategoryTypes(); }
+function getCategoriesByType(type){ return getCategories().filter(c=>getCategoryType(c)===type); }
 function getCatColor(i){ return CAT_COLOR_PALETTE[i % CAT_COLOR_PALETTE.length]; }
 // Legacy aliases
 const CATEGORIES = DEFAULT_CATEGORIES;
@@ -61,6 +88,8 @@ async function boot(){
     state.piano = piano.data || [];
     state.categories = (cats.data||[]).map(c=>c.name);
     if(!state.categories.length) state.categories = [...DEFAULT_CATEGORIES];
+    getCategories().forEach(c=>{ if(!categoryTypes[c]) categoryTypes[c]=DEFAULT_CATEGORY_TYPES[c]||'expense'; });
+    saveCategoryTypes();
   } catch(e){ console.error('Boot error:', e); }
 
   document.getElementById('loading').style.display = 'none';
@@ -283,6 +312,7 @@ async function addCategory(){
   if(!name) return;
   if(getCategories().includes(name)){alert('Category already exists.');return;}
   state.categories.push(name);
+  setCategoryType(name,type);
   await sb.from('categories').insert({name,sort_order:state.categories.length});
   input.value='';
   renderCatManager(); renderCatSelect(); renderBudgetView(); showSaved();
@@ -292,6 +322,7 @@ async function deleteCategory(cat){
   if(!confirm(`Delete category "${cat}"? Existing transactions will keep their label, and any budget set for this category will be removed.`)) return;
   state.categories=state.categories.filter(c=>c!==cat);
   delete state.budgets[cat];
+  delete categoryTypes[cat]; saveCategoryTypes();
   await Promise.all([
     sb.from('categories').delete().eq('name',cat),
     sb.from('budgets').delete().eq('cat',cat)
@@ -311,7 +342,13 @@ const CAT_RULES = [
   { keywords: ['electricity','gas','water','internet','telstra','optus','vodafone','tpg','aussie broadband','phone','council rates','body corporate','strata','insurance','rent','mortgage','utilities','bill'], cat: 'Utilities & Bills' },
   { keywords: ['cinema','event','ticketek','ticketmaster','entertainment','concert','theatre','museum','gallery','sport','gym','fitness','movie'], cat: 'Entertainment' },
   { keywords: ['amazon','ebay','kmart','target','big w','myer','david jones','zara','uniqlo','cotton on','h&m','glue','asos','the iconic','shopping','clothing','shoes','fashion','electronics','jb hi','harvey norman','apple store','officeworks'], cat: 'Shopping' },
-  { keywords: ['salary','payroll','pay','wage','income','deposit','transfer in','reimbursement','refund','cashback','interest earned','dividend'], cat: 'Other', type: 'income' },
+  { keywords: ['salary','payroll','wage','pay from employer'], cat: 'Salary', type: 'income' },
+  { keywords: ['bonus','commission','incentive'], cat: 'Bonus', type: 'income' },
+  { keywords: ['refund','cashback','rebate'], cat: 'Refund', type: 'income' },
+  { keywords: ['reimbursement','reimburse'], cat: 'Reimbursement', type: 'income' },
+  { keywords: ['interest earned','interest paid','bank interest'], cat: 'Interest', type: 'income' },
+  { keywords: ['dividend','distribution'], cat: 'Dividend', type: 'income' },
+  { keywords: ['income','deposit','transfer in'], cat: 'Other', type: 'income' },
 ];
 
 function guessCategory(description, amount, type){
@@ -327,7 +364,7 @@ function guessCategory(description, amount, type){
 function guessType(description){
   const desc = description.toLowerCase();
   // Only flag as income if very clearly an income transaction
-  const incomeKeywords = ['salary','payroll','wage','interest earned','dividend','reimbursement from'];
+  const incomeKeywords = ['salary','payroll','wage','interest earned','interest paid','dividend','distribution','bonus','commission','refund','cashback','reimbursement from','rebate'];
   if(incomeKeywords.some(k=>desc.includes(k))) return 'income';
   return 'expense'; // default everything to expense
 }
@@ -498,6 +535,28 @@ function handleStatementUpload(event){
     document.getElementById('uploadStatus').innerHTML='<span style="color:var(--pink);">⚠️ Could not read the file. Please try again.</span>';
   };
   reader.readAsText(file);
+}
+
+
+function setUploadSearch(value){
+  uploadSearchTerm = String(value||'').trim();
+  renderUploadReview();
+}
+
+function setMonthlyTxSearch(value){
+  monthlyTxSearch = String(value||'').trim().toLowerCase();
+  monthlyTxExpanded = !!monthlyTxSearch;
+  renderMonthly();
+}
+
+function highlightSearchText(text, term){
+  const safe = escapeHTML(text);
+  const q = String(term||'').trim();
+  if(!q) return safe;
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  try {
+    return safe.replace(new RegExp(escaped, 'gi'), match => `<mark class="search-highlight">${match}</mark>`);
+  } catch(e){ return safe; }
 }
 
 function renderUploadReview(){
@@ -1072,7 +1131,8 @@ const ACCT_COLORS = {
   'debit':['var(--blue-bg)','var(--blue)'],
   'joint':['var(--purple-bg)','var(--purple)']
 };
-const ASSET_CATS = ['Saving','ETF','Super'];
+const ASSET_CATS = DEFAULT_ASSET_CATEGORIES; // legacy alias
+const INCOME_CATS = DEFAULT_INCOME_CATEGORIES; // legacy alias
 let finTab = 'yearly';
 let mvYear = todayObj.getFullYear(), mvMonth = todayObj.getMonth();
 let mvAcctFilter = 'all';
@@ -1081,10 +1141,17 @@ let uploadAcct = 'personal-credit';
 let pendingUploadTxs = [];
 let merchantRules = loadMerchantRules();
 let monthlyTxExpanded = false;
+let monthlyTxSearch = '';
+let uploadSearchTerm = '';
 
 // ── Helpers ──
 function effectiveAmount(t){ return t.acct==='joint'?t.amount*0.5:t.amount; }
-function getCategories(){ return state.categories&&state.categories.length?state.categories:[...DEFAULT_CATEGORIES]; }
+function getCategories(){
+  const base = [...(state.categories||[]), ...DEFAULT_CATEGORIES];
+  (state.transactions||[]).forEach(t=>{ if(t.cat) base.push(t.cat); });
+  Object.keys(state.budgets||{}).forEach(c=>base.push(c));
+  return [...new Set(base.filter(Boolean))];
+}
 function getCatColor(i){ return CAT_COLOR_PALETTE[i%CAT_COLOR_PALETTE.length]; }
 function renderCatSelect(){
   const sel=document.getElementById('txCat');
@@ -1201,7 +1268,7 @@ function renderYearly(){
     const txs=state.transactions.filter(t=>t.monthKey===mk);
     incomeArr.push(txs.filter(t=>t.type==='income').reduce((s,t)=>s+effectiveAmount(t),0));
     const allExp=txs.filter(t=>t.type==='expense');
-    const assets=allExp.filter(t=>ASSET_CATS.includes(t.cat)).reduce((s,t)=>s+effectiveAmount(t),0);
+    const assets=allExp.filter(t=>getCategoryType(t.cat)==='asset').reduce((s,t)=>s+effectiveAmount(t),0);
     const exp=allExp.reduce((s,t)=>s+effectiveAmount(t),0);
     expArr.push(exp); assetArr.push(assets);
   }
@@ -1275,9 +1342,26 @@ function renderYearlyTable(y, maxM, incomeArr, expArr){
     <td style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--border);font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:700;color:var(--green);">$${incTotal.toFixed(0)}</td>
   </tr>`;
 
+  getCategoriesByType('income').forEach(cat=>{
+    const rowTotals=MONTH_SHORT.map((m,i)=>{
+      const mk=monthKey(y,i);
+      return state.transactions.filter(t=>t.monthKey===mk&&t.type==='income'&&t.cat===cat).reduce((s,t)=>s+effectiveAmount(t),0);
+    });
+    const rowTotal=rowTotals.slice(0,maxM+1).reduce((s,v)=>s+v,0);
+    if(rowTotal<=0) return;
+    html+=`<tr><td style="padding:6px 8px;font-size:12px;border-bottom:1px solid var(--border);color:var(--green);">${cat}</td>
+      ${rowTotals.map((v,i)=>{
+        const cur=i===curM;
+        if(i>maxM) return `<td style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--border);color:var(--muted);${cur?'background:rgba(58,123,213,0.06)':''}">—</td>`;
+        return td(v>0?'$'+v.toFixed(0):'—',cur,v>0?'var(--green)':'var(--muted)',v>0?`yrDrill(${i},'${MONTH_SHORT[i]} ${y}')`:null);
+      }).join('')}
+      <td style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--border);font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600;color:var(--green);">${rowTotal>0?'$'+rowTotal.toFixed(0):'—'}</td>
+    </tr>`;
+  });
+
   // Expense categories
   html+=secRow('Expenses');
-  const expCats=cats.filter(c=>!ASSET_CATS.includes(c));
+  const expCats=getCategoriesByType('expense');
   let expTotals=new Array(12).fill(0);
   expCats.forEach(cat=>{
     const rowTotals=MONTH_SHORT.map((m,i)=>{
@@ -1309,7 +1393,7 @@ function renderYearlyTable(y, maxM, incomeArr, expArr){
 
   // Asset rows
   html+=secRow('Assets (contributions)');
-  ASSET_CATS.forEach(cat=>{
+  getCategoriesByType('asset').forEach(cat=>{
     const rowTotals=MONTH_SHORT.map((m,i)=>{
       const mk=monthKey(y,i);
       return state.transactions.filter(t=>t.monthKey===mk&&t.cat===cat).reduce((s,t)=>s+effectiveAmount(t),0);
@@ -1404,9 +1488,15 @@ function renderMonthly(){
   const nextBtn=document.getElementById('mv-next-btn');
   if(nextBtn) nextBtn.style.opacity=isCurrentMonth?'0.3':'1';
   document.getElementById('mv-filter-pill').textContent=mvAcctFilter==='all'?'All':ACCT_LABELS[mvAcctFilter]||mvAcctFilter;
+  const mvSearchInput=document.getElementById('mvTxSearch'); if(mvSearchInput && mvSearchInput.value!==monthlyTxSearch) mvSearchInput.value=monthlyTxSearch;
 
   const allMkTxs=state.transactions.filter(t=>t.monthKey===mk);
-  const filtered=mvAcctFilter==='all'?allMkTxs:allMkTxs.filter(t=>t.acct===mvAcctFilter);
+  const accountFiltered=mvAcctFilter==='all'?allMkTxs:allMkTxs.filter(t=>t.acct===mvAcctFilter);
+  const search=monthlyTxSearch;
+  const filtered=search?accountFiltered.filter(t=>{
+    const hay=[t.description||t.desc||'',t.cat||'',t.date||'',ACCT_LABELS[t.acct]||t.acct||'',t.type||''].join(' ').toLowerCase();
+    return hay.includes(search);
+  }):accountFiltered;
 
   const isAll=mvAcctFilter==='all';
 
@@ -1461,7 +1551,7 @@ function renderMonthly(){
       </div>`).join('');
 
   // Transaction list
-  document.getElementById('mv-tx-count').textContent=filtered.length+' transaction'+(filtered.length!==1?'s':'');
+  document.getElementById('mv-tx-count').textContent=filtered.length+' transaction'+(filtered.length!==1?'s':'')+(monthlyTxSearch?' found':'');
   const txEl=document.getElementById('mv-txlist');
   const reviewBtn=document.getElementById('mv-review-all-btn');
   if(txEl) txEl.classList.toggle('expanded', monthlyTxExpanded);
@@ -1477,7 +1567,7 @@ function renderMonthly(){
       const desc=t.description||t.desc||'';
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;">
         <div style="flex:1;">
-          <div style="font-weight:500;">${desc}</div>
+          <div style="font-weight:500;">${highlightSearchText(desc,monthlyTxSearch)}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:2px;">${t.cat} · ${t.date}
             <span style="font-size:10px;padding:2px 7px;border-radius:99px;font-weight:600;background:${ac[0]};color:${ac[1]};margin-left:4px;">${ACCT_LABELS[t.acct]||t.acct}</span>
             ${t.acct==='joint'?`<span style="font-size:10px;color:var(--muted);margin-left:3px;">full $${t.amount.toFixed(2)}</span>`:''}
@@ -1536,7 +1626,7 @@ function handleStatementUpload(event){
     document.getElementById('confirmUploadBtn').style.display='none';
     return;
   }
-  document.getElementById('uploadPanel').style.display='none';
+  const panel=document.getElementById('uploadPanel'); if(panel) panel.style.display='none';
   openUploadModal();
   document.getElementById('uploadStatus').innerHTML='<span style="color:var(--blue);">📄 Reading your statement…</span>';
   document.getElementById('uploadReviewList').innerHTML='';
@@ -1563,6 +1653,9 @@ function handleStatementUpload(event){
         row.duplicate=isPotentialDuplicate(row);
         return row;
       });
+      uploadSearchTerm='';
+      const searchInput=document.getElementById('uploadSearchInput'); if(searchInput) searchInput.value='';
+      const searchWrap=document.getElementById('uploadSearchWrap'); if(searchWrap) searchWrap.style.display='block';
       renderUploadReview();
       const acctLabel=ACCT_LABELS[uploadAcct]||uploadAcct;
       const isJoint=uploadAcct==='joint';
@@ -1614,7 +1707,7 @@ function renderUploadReview(){
         <input type="checkbox" ${t.selected?'checked':''} onchange="toggleUploadSelect(${t._id},this.checked)">
         <input type="checkbox" ${t.keep?'checked':''} onchange="toggleUploadRow(${t._id},this.checked)">
         <div>
-          <div style="font-weight:500;">${escapeHTML(t.description)}</div>
+          <div style="font-weight:500;">${highlightSearchText(t.description,uploadSearchTerm)}</div>
           <div style="font-size:11px;color:var(--muted);">${escapeHTML(t.date)}</div>
         </div>
         <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;text-align:right;color:${t.type==='income'?'var(--green)':'var(--pink)'};">${t.type==='income'?'+':'-'}$${parseFloat(t.amount).toFixed(2)}</div>
@@ -1764,19 +1857,22 @@ function escapeHTML(value){
 }
 
 function openUploadModal(){document.getElementById('uploadModal').style.display='block';document.body.style.overflow='hidden';}
-function closeUploadModal(){document.getElementById('uploadModal').style.display='none';document.body.style.overflow='';pendingUploadTxs=[];document.getElementById('confirmUploadBtn').textContent='✓ Save selected transactions';document.getElementById('confirmUploadBtn').disabled=false;}
+function closeUploadModal(){document.getElementById('uploadModal').style.display='none';document.body.style.overflow='';pendingUploadTxs=[];uploadSearchTerm='';const searchWrap=document.getElementById('uploadSearchWrap');if(searchWrap) searchWrap.style.display='none';const searchInput=document.getElementById('uploadSearchInput');if(searchInput) searchInput.value='';document.getElementById('confirmUploadBtn').textContent='✓ Save selected transactions';document.getElementById('confirmUploadBtn').disabled=false;}
 
 // ── BUDGET & CATEGORIES ──
 function renderBudgetView(){
   const cats=getCategories();
-  const expCats=cats.filter(c=>!ASSET_CATS.includes(c));
+  const expCats=getCategoriesByType('expense');
+  const incomeCats=getCategoriesByType('income');
+  const assetCats=getCategoriesByType('asset');
   const now=new Date();
   const mk=monthKey(now.getFullYear(),now.getMonth());
   document.getElementById('budget-month-label').textContent=MONTH_NAMES[now.getMonth()]+' '+now.getFullYear();
 
   const budgetRowHTML=(cat,i)=>{
     const budget=state.budgets[cat]||0;
-    const actual=state.transactions.filter(t=>t.monthKey===mk&&t.type==='expense'&&t.cat===cat).reduce((s,t)=>s+effectiveAmount(t),0);
+    const catType=getCategoryType(cat);
+    const actual=state.transactions.filter(t=>t.monthKey===mk&&t.cat===cat&&(catType==='income'?t.type==='income':t.type==='expense')).reduce((s,t)=>s+effectiveAmount(t),0);
     const pct=budget?Math.min(100,Math.round((actual/budget)*100)):0;
     const over=actual>budget&&budget>0;
     const col=over?'var(--pink)':pct>80?'var(--orange)':getCatColor(i);
@@ -1798,7 +1894,8 @@ function renderBudgetView(){
   };
 
   document.getElementById('budgetExpRows').innerHTML=expCats.map((c,i)=>budgetRowHTML(c,i)).join('');
-  document.getElementById('budgetAssetRows').innerHTML=ASSET_CATS.map((c,i)=>budgetRowHTML(c,expCats.length+i)).join('');
+  const incomeEl=document.getElementById('budgetIncomeRows'); if(incomeEl) incomeEl.innerHTML=incomeCats.map((c,i)=>budgetRowHTML(c,expCats.length+i)).join('') || '<div style="color:var(--muted);font-size:13px;">No income categories yet.</div>';
+  const assetEl=document.getElementById('budgetAssetRows'); if(assetEl) assetEl.innerHTML=assetCats.map((c,i)=>budgetRowHTML(c,expCats.length+incomeCats.length+i)).join('') || '<div style="color:var(--muted);font-size:13px;">No asset categories yet.</div>';
 
   // Budget vs actual
   const hasBudgets=Object.keys(state.budgets).length>0;
@@ -1806,7 +1903,7 @@ function renderBudgetView(){
   const insEl=document.getElementById('budgetInsight');
   if(!hasBudgets){actEl.innerHTML='<div style="color:var(--muted);font-size:13px;">Set budgets above to see comparisons.</div>';insEl.style.display='none';return;}
   let over=0,totalB=0,totalA=0;
-  actEl.innerHTML=cats.map((cat,i)=>{
+  actEl.innerHTML=expCats.map((cat,i)=>{
     const b=state.budgets[cat]||0; if(!b) return '';
     const a=state.transactions.filter(t=>t.monthKey===mk&&t.type==='expense'&&t.cat===cat).reduce((s,t)=>s+effectiveAmount(t),0);
     const pct=Math.min(100,Math.round((a/b)*100));
@@ -1842,14 +1939,17 @@ async function setBudget(cat,val){
 async function addCategory(){
   const nameEl=document.getElementById('newCatInput');
   const budgetEl=document.getElementById('newCatBudget');
+  const typeEl=document.getElementById('newCatType');
   const name=nameEl.value.trim();
   const budget=parseFloat(budgetEl.value)||0;
+  const type=typeEl?typeEl.value:'expense';
   if(!name) return;
   if(getCategories().includes(name)){alert('Category already exists.');return;}
   state.categories.push(name);
+  setCategoryType(name,type);
   await sb.from('categories').insert({name,sort_order:state.categories.length});
   if(budget>0){await sb.from('budgets').upsert({cat:name,amount:budget});state.budgets[name]=budget;}
-  nameEl.value=''; budgetEl.value='';
+  nameEl.value=''; budgetEl.value=''; if(typeEl) typeEl.value='expense';
   renderCatSelect(); renderBudgetView(); showSaved();
 }
 
@@ -1857,6 +1957,7 @@ async function removeCategory(cat){
   if(!confirm(`Remove category "${cat}"? Existing transactions keep their label. Budget for this category will be deleted.`)) return;
   state.categories=state.categories.filter(c=>c!==cat);
   delete state.budgets[cat];
+  delete categoryTypes[cat]; saveCategoryTypes();
   await Promise.all([
     sb.from('categories').delete().eq('name',cat),
     sb.from('budgets').delete().eq('cat',cat)
