@@ -6,16 +6,24 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // ─── LOCAL STATE (loaded from Supabase on boot) ───
 const state = {
   goals: [], workouts: [], fitnessHeatmap: {}, fitGoals: {},
-  transactions: [], budgets: {}, books: [], readHeatmap: {}, piano: []
+  transactions: [], budgets: {}, books: [], readHeatmap: {}, piano: [],
+  categories: []
 };
+let pendingUploadTxs = []; // transactions awaiting review from PDF upload
 
 const todayObj = new Date();
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const PIANO_GOAL = 90;
 const bookColors = ['var(--green)','var(--blue)','var(--orange)','var(--pink)','var(--purple)'];
-const CATEGORIES = ['Food & Dining','Transport','Health & Medical','Entertainment','Utilities & Bills','Shopping','Subscriptions','Other'];
-const CAT_COLORS = ['var(--green)','var(--blue)','var(--orange)','var(--pink)','var(--purple)','#78ffd4','#ffd478','var(--muted)'];
+// Categories — loaded from state, with defaults
+const DEFAULT_CATEGORIES = ['Food & Dining','Transport','Health & Medical','Entertainment','Utilities & Bills','Shopping','Subscriptions','Other'];
+const CAT_COLOR_PALETTE = ['var(--green)','var(--blue)','var(--orange)','var(--pink)','var(--purple)','#2a9d8f','#e9c46a','var(--muted)','#e76f51','#457b9d','#a8dadc','#6d6875'];
+function getCategories(){ return state.categories && state.categories.length ? state.categories : [...DEFAULT_CATEGORIES]; }
+function getCatColor(i){ return CAT_COLOR_PALETTE[i % CAT_COLOR_PALETTE.length]; }
+// Legacy aliases
+const CATEGORIES = DEFAULT_CATEGORIES;
+const CAT_COLORS = CAT_COLOR_PALETTE;
 const catColors = {life:{bg:'#1a2a1a',color:'var(--green)'},fitness:{bg:'#1a1e2e',color:'var(--blue)'},finance:{bg:'#2e2a1a',color:'var(--orange)'},growth:{bg:'#2a1a2e',color:'var(--purple)'},career:{bg:'#2e1a1a',color:'var(--pink)'}};
 const catLabels = {life:'🌱 Life',fitness:'💪 Fitness',finance:'💰 Finance',growth:'📚 Growth',career:'💼 Career'};
 
@@ -31,7 +39,7 @@ function showSaved(){
 // ─── BOOT: LOAD ALL DATA ───
 async function boot(){
   try {
-    const [goals, workouts, fheat, fgoals, txs, budgets, books, rheat, piano] = await Promise.all([
+    const [goals, workouts, fheat, fgoals, txs, budgets, books, rheat, piano, cats] = await Promise.all([
       sb.from('goals').select('*'),
       sb.from('workouts').select('*').order('created_at',{ascending:false}),
       sb.from('fitness_heatmap').select('*'),
@@ -41,6 +49,7 @@ async function boot(){
       sb.from('books').select('*').order('created_at',{ascending:true}),
       sb.from('reading_heatmap').select('*'),
       sb.from('piano').select('*').order('created_at',{ascending:false}),
+      sb.from('categories').select('*').order('sort_order',{ascending:true}),
     ]);
     state.goals = goals.data || [];
     state.workouts = workouts.data || [];
@@ -51,6 +60,8 @@ async function boot(){
     state.books = (books.data||[]).map(b=>({...b, startDate: b.start_date, endDate: b.end_date}));
     state.readHeatmap = Object.fromEntries((rheat.data||[]).map(r=>[r.day_key, r.book_ids||[]]));
     state.piano = piano.data || [];
+    state.categories = (cats.data||[]).map(c=>c.name);
+    if(!state.categories.length) state.categories = [...DEFAULT_CATEGORIES];
   } catch(e){ console.error('Boot error:', e); }
 
   document.getElementById('loading').style.display = 'none';
@@ -58,7 +69,7 @@ async function boot(){
   document.getElementById('dateDisplay').textContent = todayObj.toLocaleDateString('en-AU',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
 
   renderGoals(); renderWorkouts(); buildCalendar(); updateFitGoalDisplay();
-  renderFinance(); renderTotalCover(); renderBudgetView();
+  renderCatSelect(); renderFinance(); renderTotalCover(); renderBudgetView(); renderCatManager();
   renderBooks(); updateReadCalBookSelect(); buildReadCal(); renderReadReports();
   renderPiano(); updateOverview(); renderReports();
 }
@@ -200,8 +211,10 @@ function switchAcct(acct){
   const accountsView=document.getElementById('fin-view-accounts');
   const budgetView=document.getElementById('fin-view-budget');
   const subTabs=document.getElementById('fin-personal-subtabs');
-  if(acct==='budget'){accountsView.style.display='none';budgetView.style.display='block';renderBudgetView();}
-  else{accountsView.style.display='block';budgetView.style.display='none';subTabs.style.display=acct==='personal'?'flex':'none';updateBadge();renderFinance();}
+  const catsView=document.getElementById('fin-view-categories');
+  if(acct==='budget'){accountsView.style.display='none';budgetView.style.display='none';catsView.style.display='none';budgetView.style.display='block';renderBudgetView();}
+  else if(acct==='categories'){accountsView.style.display='none';budgetView.style.display='none';catsView.style.display='block';renderCatManager();}
+  else{accountsView.style.display='block';budgetView.style.display='none';catsView.style.display='none';subTabs.style.display=acct==='personal'?'flex':'none';updateBadge();renderFinance();}
 }
 function switchSubAcct(sub){
   activeSubAcct=sub;
@@ -238,6 +251,199 @@ async function deleteTransaction(id){
   renderFinance();renderTotalCover();updateOverview();showSaved();
 }
 function effectiveAmount(t){return t.acct==='joint'?t.amount*0.5:t.amount;}
+
+// ── CATEGORY SELECT ──
+function renderCatSelect(){
+  const sel=document.getElementById('txCat');
+  if(!sel) return;
+  const cats=getCategories();
+  sel.innerHTML=cats.map(c=>`<option>${c}</option>`).join('');
+}
+
+// ── CATEGORY MANAGER ──
+function renderCatManager(){
+  const list=document.getElementById('catManagerList');
+  if(!list) return;
+  const cats=getCategories();
+  list.innerHTML=cats.map((cat,i)=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">
+      <div style="width:8px;height:8px;border-radius:50%;background:${getCatColor(i)};flex-shrink:0;"></div>
+      <span style="flex:1;font-size:13px;">${cat}</span>
+      ${cats.length>1?`<button onclick="deleteCategory('${cat}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:15px;transition:color 0.2s;" onmouseover="this.style.color='var(--pink)'" onmouseout="this.style.color='var(--muted)'">×</button>`:''}
+    </div>`).join('');
+}
+
+async function addCategory(){
+  const input=document.getElementById('newCatInput');
+  const name=input.value.trim();
+  if(!name) return;
+  if(getCategories().includes(name)){alert('Category already exists.');return;}
+  state.categories.push(name);
+  await sb.from('categories').insert({name,sort_order:state.categories.length});
+  input.value='';
+  renderCatManager(); renderCatSelect(); renderBudgetView(); showSaved();
+}
+
+async function deleteCategory(cat){
+  if(!confirm(`Delete category "${cat}"? Existing transactions will keep their label, and any budget set for this category will be removed.`)) return;
+  state.categories=state.categories.filter(c=>c!==cat);
+  delete state.budgets[cat];
+  await Promise.all([
+    sb.from('categories').delete().eq('name',cat),
+    sb.from('budgets').delete().eq('cat',cat)
+  ]);
+  renderCatManager(); renderCatSelect(); renderBudgetView(); showSaved();
+}
+
+// ── PDF UPLOAD & AI REVIEW ──
+async function handleStatementUpload(event){
+  const file=event.target.files[0];
+  if(!file) return;
+  event.target.value=''; // reset so same file can be re-uploaded
+  openUploadModal();
+  document.getElementById('uploadStatus').innerHTML='<span style="color:var(--blue);">📄 Reading your statement…</span>';
+  document.getElementById('uploadReviewList').innerHTML='';
+  document.getElementById('confirmUploadBtn').style.display='none';
+
+  try {
+    // Convert PDF to base64
+    const base64 = await fileToBase64(file);
+    const acctLabel = activeAcct==='joint'?'Joint (50/50 split)':'Personal';
+
+    const response = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:4000,
+        messages:[{
+          role:'user',
+          content:[
+            {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
+            {type:'text',text:`Extract all transactions from this bank statement. 
+Account type: ${acctLabel}
+Available categories: ${getCategories().join(', ')}
+
+Return ONLY a JSON array, no other text, no markdown. Each item:
+{
+  "date": "DD Mon" (e.g. "3 Jan"),
+  "description": "merchant/payee name",
+  "amount": 12.50 (positive number),
+  "type": "expense" or "income",
+  "category": "best matching category from the list",
+  "subType": "credit" or "debit" or "income"
+}
+
+Rules:
+- Salary/wages/transfers in = income
+- Everything else = expense  
+- Match category as closely as possible to the available list
+- Use "Other" if nothing fits
+- Skip balance rows, opening/closing balance, fees labelled as reversals`}
+          ]
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const text = data.content?.find(b=>b.type==='text')?.text || '';
+    let txs = [];
+    try {
+      const clean = text.replace(/```json|```/g,'').trim();
+      txs = JSON.parse(clean);
+    } catch(e){
+      document.getElementById('uploadStatus').innerHTML='<span style="color:var(--pink);">⚠️ Could not read the statement. Try a clearer PDF or screenshot.</span>';
+      return;
+    }
+
+    if(!txs.length){
+      document.getElementById('uploadStatus').innerHTML='<span style="color:var(--muted);">No transactions found in this file.</span>';
+      return;
+    }
+
+    pendingUploadTxs = txs.map((t,i)=>({...t, _id:i, acct:activeAcct, keep:true}));
+    renderUploadReview();
+    document.getElementById('uploadStatus').innerHTML=`<span style="color:var(--green);">✓ Found <strong>${txs.length} transactions</strong>. Review below — edit categories or uncheck to skip.</span>`;
+    document.getElementById('confirmUploadBtn').style.display='block';
+
+  } catch(e){
+    console.error(e);
+    document.getElementById('uploadStatus').innerHTML='<span style="color:var(--pink);">⚠️ Something went wrong. Please try again.</span>';
+  }
+}
+
+function fileToBase64(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result.split(',')[1]);
+    r.onerror=()=>rej(new Error('Read failed'));
+    r.readAsDataURL(file);
+  });
+}
+
+function renderUploadReview(){
+  const cats=getCategories();
+  const list=document.getElementById('uploadReviewList');
+  list.innerHTML=`
+    <div style="display:grid;grid-template-columns:30px 1fr 100px 110px 120px;gap:8px;padding:8px 0;border-bottom:2px solid var(--border);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">
+      <div></div><div>Description</div><div>Amount</div><div>Type</div><div>Category</div>
+    </div>
+    ${pendingUploadTxs.map(t=>`
+    <div style="display:grid;grid-template-columns:30px 1fr 100px 110px 120px;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);align-items:center;font-size:13px;" id="urow_${t._id}">
+      <input type="checkbox" ${t.keep?'checked':''} onchange="toggleUploadRow(${t._id},this.checked)" style="width:16px;height:16px;accent-color:var(--blue);">
+      <div>
+        <div style="font-weight:500;">${t.description}</div>
+        <div style="font-size:11px;color:var(--muted);">${t.date}</div>
+      </div>
+      <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;color:${t.type==='income'?'var(--green)':'var(--pink)'};">${t.type==='income'?'+':'-'}$${parseFloat(t.amount).toFixed(2)}</div>
+      <select onchange="updateUploadRow(${t._id},'type',this.value)" style="font-size:11px;padding:4px 6px;">
+        <option value="expense" ${t.type==='expense'?'selected':''}>− Expense</option>
+        <option value="income" ${t.type==='income'?'selected':''}>+ Income</option>
+      </select>
+      <select onchange="updateUploadRow(${t._id},'category',this.value)" style="font-size:11px;padding:4px 6px;">
+        ${cats.map(c=>`<option ${c===t.category?'selected':''}>${c}</option>`).join('')}
+      </select>
+    </div>`).join('')}`;
+}
+
+function toggleUploadRow(id, checked){
+  const t=pendingUploadTxs.find(t=>t._id===id);
+  if(t) t.keep=checked;
+}
+
+function updateUploadRow(id, field, val){
+  const t=pendingUploadTxs.find(t=>t._id===id);
+  if(t) t[field]=val;
+  // re-colour amount cell
+  renderUploadReview();
+}
+
+async function confirmUpload(){
+  const btn=document.getElementById('confirmUploadBtn');
+  btn.textContent='Saving…'; btn.disabled=true;
+  const toSave=pendingUploadTxs.filter(t=>t.keep);
+  const now=new Date();
+  const mk=monthKey(now.getFullYear(),now.getMonth());
+  for(const t of toSave){
+    const id=Date.now()+Math.random();
+    const subType=t.type==='income'?'income':(t.subType||'credit');
+    await sb.from('transactions').insert({
+      id,description:t.description,amount:parseFloat(t.amount),
+      type:t.type,sub_type:subType,cat:t.category,
+      acct:t.acct,date:t.date,month_key:mk
+    });
+    state.transactions.unshift({
+      id,description:t.description,amount:parseFloat(t.amount),
+      type:t.type,subType,cat:t.category,
+      acct:t.acct,date:t.date,monthKey:mk
+    });
+  }
+  closeUploadModal();
+  renderFinance(); renderTotalCover(); updateOverview(); showSaved();
+}
+
+function openUploadModal(){ document.getElementById('uploadModal').style.display='block'; document.body.style.overflow='hidden'; }
+function closeUploadModal(){ document.getElementById('uploadModal').style.display='none'; document.body.style.overflow=''; pendingUploadTxs=[]; }
 function renderTotalCover(){
   const mk=monthKey(todayObj.getFullYear(),todayObj.getMonth());
   const allExp=state.transactions.filter(t=>t.type==='expense'&&t.monthKey===mk);
@@ -277,7 +483,8 @@ function renderFinance(){
   const catEl=document.getElementById('fin-cat-breakdown');
   if(!expenses.length){catEl.innerHTML='<div style="color:var(--muted);font-size:13px;">No expenses this month.</div>';}
   else{
-    const byCat=CATEGORIES.map((cat,i)=>{const sum=expenses.filter(t=>t.cat===cat).reduce((s,t)=>s+effectiveAmount(t),0);return{cat,sum,color:CAT_COLORS[i]};}).filter(c=>c.sum>0).sort((a,b)=>b.sum-a.sum);
+    const cats=getCategories();
+    const byCat=cats.map((cat,i)=>{const sum=expenses.filter(t=>t.cat===cat).reduce((s,t)=>s+effectiveAmount(t),0);return{cat,sum,color:getCatColor(i)};}).filter(c=>c.sum>0).sort((a,b)=>b.sum-a.sum);
     const maxCat=byCat[0]?.sum||1;
     catEl.innerHTML=byCat.map(c=>`<div class="cat-row"><div class="cat-dot" style="background:${c.color}"></div><div class="cat-name">${c.cat}</div><div class="cat-bar-wrap"><div class="cat-bar-fill" style="width:${Math.round((c.sum/maxCat)*100)}%;background:${c.color}"></div></div><div class="cat-amount" style="color:${c.color}">$${c.sum.toFixed(0)}${isJoint?'<span class="split-note">½</span>':''}</div></div>`).join('');
   }
@@ -318,7 +525,8 @@ function renderBudgetView(){
   const mk=monthKey(todayObj.getFullYear(),todayObj.getMonth());
   const mn=MONTH_SHORT[todayObj.getMonth()]+' '+todayObj.getFullYear();
   document.getElementById('budget-month-label').textContent=mn;
-  document.getElementById('budgetSetterRows').innerHTML=CATEGORIES.map((cat,i)=>`
+  const budgCats=getCategories();
+  document.getElementById('budgetSetterRows').innerHTML=budgCats.map((cat,i)=>`
     <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);">
       <div class="cat-dot" style="background:${CAT_COLORS[i]}"></div>
       <div style="font-size:12px;width:140px;flex-shrink:0;">${cat}</div>
@@ -331,14 +539,14 @@ function renderBudgetView(){
   const budgetIns=document.getElementById('budgetInsight');
   if(!hasBudgets){actRows.innerHTML='<div style="color:var(--muted);font-size:13px;">Set budgets above to see comparisons.</div>';budgetIns.style.display='none';return;}
   let overCount=0,totalBudget=0,totalActual=0;
-  actRows.innerHTML=CATEGORIES.map((cat,i)=>{
+  actRows.innerHTML=budgCats.map((cat,i)=>{
     const budget=state.budgets[cat]||0;if(!budget) return '';
     const personal=allExp.filter(t=>t.acct==='personal'&&t.cat===cat).reduce((s,t)=>s+t.amount,0);
     const joint=allExp.filter(t=>t.acct==='joint'&&t.cat===cat).reduce((s,t)=>s+t.amount*0.5,0);
     const actual=personal+joint;
     const pct=Math.min(100,Math.round((actual/budget)*100));
     const over=actual>budget;if(over)overCount++;totalBudget+=budget;totalActual+=actual;
-    const color=over?'var(--pink)':pct>80?'var(--orange)':CAT_COLORS[i];
+    const color=over?'var(--pink)':pct>80?'var(--orange)':getCatColor(i);
     return `<div class="budget-row"><div class="cat-dot" style="background:${CAT_COLORS[i]}"></div><div class="budget-cat">${cat}</div><div class="budget-bars"><div class="budget-bar-track"><div class="budget-bar-actual" style="width:${pct}%;background:${color};"></div></div><div class="budget-nums"><span class="${over?'over':''}">$${actual.toFixed(0)} spent</span><span>$${budget} budget</span></div></div><div class="budget-status" style="color:${color};">${over?'▲ over':pct+'%'}</div></div>`;
   }).filter(Boolean).join('');
   budgetIns.style.display='block';
