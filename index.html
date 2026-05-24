@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My OS</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -157,7 +159,10 @@
     <button class="acct-tab personal active" onclick="switchAcct('personal')">💳 Personal</button>
     <button class="acct-tab joint" onclick="switchAcct('joint')">🤝 Joint (50/50)</button>
     <button class="acct-tab" onclick="switchAcct('budget')">📊 Budget</button>
+    <button class="acct-tab" onclick="switchAcct('categories')">🏷️ Categories</button>
   </div>
+
+  <!-- ACCOUNTS VIEW -->
   <div id="fin-view-accounts">
     <div class="grid-3" style="margin-bottom:16px;">
       <div class="card"><div class="card-label">Income</div><div class="card-value" style="color:var(--green)" id="fin-income">$0</div><div class="card-sub" id="fin-income-sub"></div></div>
@@ -174,29 +179,36 @@
         <div id="fin-monthly-review"><div style="color:var(--muted);font-size:13px;">No data yet.</div></div>
       </div>
     </div>
-    <div id="fin-personal-subtabs" style="display:flex;gap:4px;margin-bottom:12px;">
-      <div class="sub-tabs">
-        <button class="sub-tab active" onclick="switchSubAcct('credit')">Credit</button>
-        <button class="sub-tab" onclick="switchSubAcct('debit')">Debit</button>
-        <button class="sub-tab" onclick="switchSubAcct('income')">Income</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+      <div id="fin-personal-subtabs" style="display:flex;gap:4px;">
+        <div class="sub-tabs">
+          <button class="sub-tab active" onclick="switchSubAcct('credit')">Credit</button>
+          <button class="sub-tab" onclick="switchSubAcct('debit')">Debit</button>
+          <button class="sub-tab" onclick="switchSubAcct('income')">Income</button>
+        </div>
+      </div>
+      <!-- UPLOAD BUTTON -->
+      <div>
+        <input type="file" id="statementFile" accept=".pdf" style="display:none;" onchange="handleStatementUpload(event)">
+        <button class="add-btn" style="background:var(--surface2);color:var(--blue);border:1px solid var(--blue);display:flex;align-items:center;gap:6px;" onclick="document.getElementById('statementFile').click()">
+          📄 Upload Statement
+        </button>
       </div>
     </div>
     <div class="card">
-      <div class="card-label">Transactions <span id="fin-acct-badge" class="pill" style="background:#1a2e1a;color:var(--green);margin-left:4px;">Personal · Credit</span></div>
+      <div class="card-label">Transactions <span id="fin-acct-badge" class="pill" style="background:var(--green-bg);color:var(--green);margin-left:4px;">Personal · Credit</span></div>
       <div id="transactionList"><div style="color:var(--muted);font-size:13px;padding:8px 0;">No transactions yet.</div></div>
       <div class="add-row" style="margin-top:14px">
         <input class="add-input" id="txDesc" placeholder="Description…">
         <input class="number-input" id="txAmount" placeholder="0.00" type="number" min="0" step="0.01">
         <select id="txType"><option value="expense">− Expense</option><option value="income">+ Income</option></select>
-        <select id="txCat">
-          <option>Food & Dining</option><option>Transport</option><option>Health & Medical</option>
-          <option>Entertainment</option><option>Utilities & Bills</option><option>Shopping</option>
-          <option>Subscriptions</option><option>Other</option>
-        </select>
+        <select id="txCat"></select>
         <button class="add-btn" onclick="addTransaction()">+ Add</button>
       </div>
     </div>
   </div>
+
+  <!-- BUDGET VIEW -->
   <div id="fin-view-budget" style="display:none;">
     <div class="card" style="margin-bottom:16px;">
       <div class="card-label" style="margin-bottom:14px;">Set monthly budgets — saved as your defaults</div>
@@ -208,6 +220,35 @@
       <div class="insight" id="budgetInsight" style="margin-top:12px;display:none;"></div>
     </div>
   </div>
+
+  <!-- CATEGORIES VIEW -->
+  <div id="fin-view-categories" style="display:none;">
+    <div class="card">
+      <div class="card-label" style="margin-bottom:14px;">Manage categories — used across Personal, Joint and Budget</div>
+      <div id="catManagerList"></div>
+      <div class="add-row" style="margin-top:16px;">
+        <input class="add-input" id="newCatInput" placeholder="New category name…" onkeydown="if(event.key==='Enter') addCategory()">
+        <button class="add-btn" onclick="addCategory()">+ Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- UPLOAD REVIEW MODAL -->
+  <div id="uploadModal" style="display:none;position:fixed;inset:0;background:rgba(30,42,58,0.5);z-index:1000;overflow-y:auto;padding:24px;">
+    <div style="background:var(--surface);border-radius:16px;max-width:800px;margin:0 auto;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.15);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;">Review transactions</div>
+        <button onclick="closeUploadModal()" style="background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer;">×</button>
+      </div>
+      <div id="uploadStatus" style="margin-bottom:16px;font-size:13px;color:var(--muted);"></div>
+      <div id="uploadReviewList"></div>
+      <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;">
+        <button class="add-btn" id="confirmUploadBtn" onclick="confirmUpload()" style="display:none;">✓ Save all transactions</button>
+        <button onclick="closeUploadModal()" style="background:none;border:1px solid var(--border);border-radius:10px;padding:10px 16px;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- GROWTH -->
