@@ -157,13 +157,25 @@
     </div>
   </div>
 
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
     <div class="fin-tabs">
       <button id="ftab-yearly" class="fin-tab active" onclick="switchFinTab('yearly')">📈 Yearly</button>
       <button id="ftab-monthly" class="fin-tab" onclick="switchFinTab('monthly')">📅 Monthly</button>
       <button id="ftab-budget" class="fin-tab" onclick="switchFinTab('budget')">📊 Budget</button>
     </div>
-    <button onclick="toggleAddTxForm()" class="add-transaction-btn">+ Add transaction</button>
+    <div id="monthlyActionButtons" class="finance-action-buttons" style="display:none;">
+      <button onclick="toggleAddTxForm()" class="add-transaction-btn">+ Add transaction</button>
+      <button class="add-transaction-btn secondary" onclick="toggleUploadPanel()">📄 Upload CSV</button>
+    </div>
+  </div>
+
+  <div class="card budget-add-card" id="budgetAddCategoryCard" style="display:none;margin-bottom:16px;">
+    <div class="card-label">Add category</div>
+    <div class="add-row" style="margin-top:0;">
+      <input class="add-input" id="newCatInput" placeholder="New category name…" onkeydown="if(event.key==='Enter') addCategory()">
+      <input class="number-input" id="newCatBudget" placeholder="Budget" type="number" min="0" step="10">
+      <button class="add-btn" onclick="addCategory()">+ Add</button>
+    </div>
   </div>
 
   <div id="addTxForm" class="card" style="display:none;margin-bottom:16px;">
@@ -255,12 +267,15 @@
         <div class="card-label">Spending by category <span class="pill" id="mv-filter-pill" style="background:var(--blue-bg);color:var(--blue);margin-left:4px;">All</span></div>
         <div id="mv-cats"></div>
       </div>
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div class="card monthly-tx-card" id="monthlyTxCard">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;">
           <div class="card-label" style="margin-bottom:0;">Transactions</div>
-          <span class="card-sub" id="mv-tx-count">0 transactions</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="card-sub" id="mv-tx-count">0 transactions</span>
+            <button id="mv-review-all-btn" class="small-link-btn" onclick="toggleMonthlyTxList()" style="display:none;">Review all</button>
+          </div>
         </div>
-        <div id="mv-txlist"></div>
+        <div id="mv-txlist" class="monthly-tx-list"></div>
       </div>
     </div>
     <div class="insight" id="mv-insight" style="display:none;margin-bottom:16px;"></div>
@@ -277,7 +292,6 @@
       <div class="card-sub" style="margin-top:8px;">Joint transactions are counted as 50% in your cover and reports.</div>
     </div>
 
-    <button class="add-btn" style="margin-bottom:16px;background:var(--surface2);color:var(--blue);border:1px solid var(--blue);" onclick="toggleUploadPanel()">📄 Upload CSV Statement</button>
   </div>
 
   <div class="view" id="fin-view-budget" style="display:none;">
@@ -289,14 +303,6 @@
       <div class="card">
         <div class="card-label">Asset contribution targets</div>
         <div id="budgetAssetRows"></div>
-      </div>
-    </div>
-    <div class="card" style="margin-bottom:16px;">
-      <div class="card-label">Add category</div>
-      <div class="add-row" style="margin-top:0;">
-        <input class="add-input" id="newCatInput" placeholder="New category name…" onkeydown="if(event.key==='Enter') addCategory()">
-        <input class="number-input" id="newCatBudget" placeholder="Budget" type="number" min="0" step="10">
-        <button class="add-btn" onclick="addCategory()">+ Add</button>
       </div>
     </div>
     <div class="card">
