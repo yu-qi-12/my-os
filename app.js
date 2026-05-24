@@ -411,10 +411,15 @@ function parseCSV(text){
 }
 
 function formatDate(raw){
-  // Try to parse various date formats and return "DD Mon"
+  // Try to parse various date formats and return DD/MM/YY
   try {
     const d = new Date(raw);
-    if(!isNaN(d)) return d.toLocaleDateString('en-AU',{day:'numeric',month:'short'});
+    if(!isNaN(d)){
+      const dd = String(d.getDate()).padStart(2,'0');
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const yy = String(d.getFullYear()).slice(2);
+      return `${dd}/${mm}/${yy}`;
+    }
   } catch(e){}
   return raw;
 }
@@ -485,7 +490,7 @@ function renderUploadReview(){
       </div>
       <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;color:${t.type==='income'?'var(--green)':'var(--pink)'};">${t.type==='income'?'+':'-'}$${parseFloat(t.amount).toFixed(2)}</div>
       <select onchange="updateUploadRow(${t._id},'type',this.value)" style="font-size:11px;padding:4px 6px;">
-        <option value="expense" ${t.type==='expense'?'selected':''}>− Expense</option>
+        <option value="expense" ${t.type!=='income'?'selected':''}>− Expense</option>
         <option value="income" ${t.type==='income'?'selected':''}>+ Income</option>
       </select>
       <select onchange="updateUploadRow(${t._id},'category',this.value)" style="font-size:11px;padding:4px 6px;">
