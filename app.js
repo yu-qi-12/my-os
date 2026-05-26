@@ -108,7 +108,7 @@ async function boot(){
   renderGoals(); renderWorkouts(); buildCalendar(); updateFitGoalDisplay();
   renderCatSelect(); renderTotalCover(); switchFinTab('yearly');
   renderBooks(); updateReadCalBookSelect(); buildReadCal(); renderReadReports();
-  renderPiano(); updateOverview(); renderReports();
+  renderPiano(); renderGrowthTrackers(); updateOverview(); renderReports();
 }
 
 // ─── TABS ───
@@ -2475,4 +2475,741 @@ function renderBarChart(data,maxVal,goalVal){
 }
 
 // ─── START ───
+// boot moved to end after Growth overrides are loaded.
+
+// ─── CUSTOM GROWTH TRACKERS ───
+// Lightweight customisation layer for Growth. Stored locally for now so this update does not require Supabase schema changes.
+const GROWTH_TRACKER_KEY = 'myos_growth_trackers_v1';
+let growthTrackers = loadGrowthTrackers();
+let selectedGrowthTrackerId = growthTrackers[0]?.id || '';
+const growthCalView = { year: todayObj.getFullYear(), month: todayObj.getMonth() };
+
+function loadGrowthTrackers(){
+  try {
+    const raw = localStorage.getItem(GROWTH_TRACKER_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch(e){
+    console.warn('Could not load growth trackers', e);
+    return [];
+  }
+}
+
+function saveGrowthTrackers(){
+  localStorage.setItem(GROWTH_TRACKER_KEY, JSON.stringify(growthTrackers));
+}
+
+function growthMonthKey(y, m){
+  return `${y}-${String(m+1).padStart(2,'0')}`;
+}
+
+function growthTrackerById(id){
+  return growthTrackers.find(t => String(t.id) === String(id));
+}
+
+function addGrowthTracker(){
+  const nameInput = document.getElementById('growthItemName');
+  const goalInput = document.getElementById('growthItemGoal');
+  if(!nameInput) return;
+  const name = nameInput.value.trim();
+  const monthlyGoal = parseInt(goalInput?.value || '0', 10) || 0;
+  if(!name) return;
+
+  const exists = growthTrackers.some(t => t.name.toLowerCase() === name.toLowerCase());
+  if(exists){
+    alert('This growth item already exists.');
+    return;
+  }
+
+  const tracker = {
+    id: Date.now(),
+    name,
+    monthlyGoal,
+    createdAt: new Date().toISOString(),
+    logs: {}
+  };
+  growthTrackers.push(tracker);
+  selectedGrowthTrackerId = tracker.id;
+  nameInput.value = '';
+  if(goalInput) goalInput.value = '';
+  saveGrowthTrackers();
+  renderGrowthTrackers();
+  updateOverview();
+  showSaved();
+}
+
+function deleteGrowthTracker(id){
+  const tracker = growthTrackerById(id);
+  if(!tracker) return;
+  if(!confirm(`Delete "${tracker.name}" and its tracking history?`)) return;
+  growthTrackers = growthTrackers.filter(t => String(t.id) !== String(id));
+  selectedGrowthTrackerId = growthTrackers[0]?.id || '';
+  saveGrowthTrackers();
+  renderGrowthTrackers();
+  updateOverview();
+  showSaved();
+}
+
+function updateGrowthGoal(id, value){
+  const tracker = growthTrackerById(id);
+  if(!tracker) return;
+  tracker.monthlyGoal = parseInt(value || '0', 10) || 0;
+  saveGrowthTrackers();
+  renderGrowthTrackers();
+  showSaved();
+}
+
+function selectGrowthTracker(id){
+  selectedGrowthTrackerId = id;
+  renderGrowthTrackers();
+}
+
+function toggleGrowthDay(key){
+  const tracker = growthTrackerById(selectedGrowthTrackerId);
+  if(!tracker) return;
+  tracker.logs = tracker.logs || {};
+  if(tracker.logs[key]) delete tracker.logs[key];
+  else tracker.logs[key] = true;
+  saveGrowthTrackers();
+  renderGrowthTrackers();
+  showSaved();
+}
+
+function growthDaysForTracker(tracker, y, m){
+  if(!tracker?.logs) return 0;
+  const prefix = `${y}-${String(m+1).padStart(2,'0')}-`;
+  return Object.keys(tracker.logs).filter(k => k.startsWith(prefix) && tracker.logs[k]).length;
+}
+
+function renderGrowthTrackerList(){
+  const list = document.getElementById('growthTrackerList');
+  if(!list) return;
+  if(!growthTrackers.length){
+    list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No custom growth items yet. Add one above.</div>';
+    return;
+  }
+  list.innerHTML = growthTrackers.map(t => {
+    const curr = growthDaysForTracker(t, growthCalView.year, growthCalView.month);
+    const goal = t.monthlyGoal || 0;
+    const pct = goal ? Math.min(100, Math.round((curr / goal) * 100)) : 0;
+    const isSelected = String(t.id) === String(selectedGrowthTrackerId);
+    return `<div class="growth-tracker-item ${isSelected?'active':''}" onclick="selectGrowthTracker('${t.id}')">
+      <div style="flex:1;min-width:140px;">
+        <div style="font-weight:600;font-size:13px;color:var(--text);">${escapeHtml(t.name)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px;">${curr}${goal?` / ${goal}`:''} days this month</div>
+        ${goal?`<div class="progress-bar" style="height:4px;margin-top:7px;"><div class="progress-fill" style="background:var(--purple);width:${pct}%"></div></div>`:''}
+      </div>
+      <input onclick="event.stopPropagation()" onchange="updateGrowthGoal('${t.id}', this.value)" value="${goal || ''}" type="number" min="1" placeholder="goal" class="growth-goal-input">
+      <button onclick="event.stopPropagation();deleteGrowthTracker('${t.id}')" class="del-btn">×</button>
+    </div>`;
+  }).join('');
+}
+
+function renderGrowthTrackerSelect(){
+  const sel = document.getElementById('growthTrackerSelect');
+  if(!sel) return;
+  if(!growthTrackers.length){
+    sel.innerHTML = '<option value="">No items yet</option>';
+    return;
+  }
+  if(!growthTrackerById(selectedGrowthTrackerId)) selectedGrowthTrackerId = growthTrackers[0].id;
+  sel.innerHTML = growthTrackers.map(t => `<option value="${t.id}" ${String(t.id)===String(selectedGrowthTrackerId)?'selected':''}>${escapeHtml(t.name)}</option>`).join('');
+}
+
+function buildGrowthCal(){
+  const label = document.getElementById('growthCalLabel');
+  const grid = document.getElementById('growthCalGrid');
+  if(!label || !grid) return;
+  const {year, month} = growthCalView;
+  label.textContent = `${MONTH_NAMES[month]} ${year}`;
+  const tracker = growthTrackerById(selectedGrowthTrackerId);
+  if(!tracker){
+    grid.innerHTML = '<div style="grid-column:1/-1;color:var(--muted);font-size:13px;padding:16px;text-align:center;border:1px dashed var(--border);border-radius:12px;">Add a growth item to start monthly tracking.</div>';
+    return;
+  }
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const offset = (firstDay + 6) % 7;
+  let html = '';
+  for(let i=0;i<offset;i++) html += '<div class="cal-cell empty"></div>';
+  for(let d=1; d<=daysInMonth; d++){
+    const key = dayKey(year, month, d);
+    const isActive = !!tracker.logs?.[key];
+    const isToday = todayObj.getFullYear()===year && todayObj.getMonth()===month && todayObj.getDate()===d;
+    html += `<div class="cal-cell ${isActive?'active':''} ${isToday?'today':''}" style="${isActive?'background:var(--purple);color:#fff;':''}" onclick="toggleGrowthDay('${key}')">${d}</div>`;
+  }
+  grid.innerHTML = html;
+}
+
+function renderGrowthCustomReport(){
+  const el = document.getElementById('growthCustomReport');
+  if(!el) return;
+  const tracker = growthTrackerById(selectedGrowthTrackerId);
+  if(!tracker){
+    el.innerHTML = '<div class="card"><div style="color:var(--muted);font-size:13px;">No custom growth item selected.</div></div>';
+    return;
+  }
+  const y = growthCalView.year, m = growthCalView.month;
+  const curr = growthDaysForTracker(tracker, y, m);
+  const prevM = m===0 ? 11 : m-1;
+  const prevY = m===0 ? y-1 : y;
+  const prev = growthDaysForTracker(tracker, prevY, prevM);
+  const goal = tracker.monthlyGoal || 0;
+  const goalPct = goal ? Math.min(100, Math.round((curr / goal) * 100)) : null;
+  const months = [];
+  for(let i=5;i>=0;i--){
+    let mm = m-i, yy = y;
+    if(mm<0){ mm += 12; yy--; }
+    months.push({ y:yy, m:mm, label:MONTH_SHORT[mm]+(yy!==y?` '${String(yy).slice(2)}`:''), value:growthDaysForTracker(tracker, yy, mm), highlight: yy===y && mm===m });
+  }
+  const maxVal = Math.max(...months.map(mo=>mo.value), goal || 1, 1);
+  el.innerHTML = `<div class="card"><div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;margin-bottom:14px;">${escapeHtml(tracker.name)} — ${MONTH_NAMES[m]} ${y}</div>
+    <div class="stat-row">
+      <div class="stat-box"><div class="stat-box-label">Days tracked</div><div class="stat-box-val" style="color:var(--purple)">${curr} ${deltaBadge(curr,prev)}</div></div>
+      <div class="stat-box"><div class="stat-box-label">Last month</div><div class="stat-box-val" style="color:var(--muted)">${prev}</div></div>
+      <div class="stat-box"><div class="stat-box-label">Monthly goal</div><div class="stat-box-val" style="color:var(--blue)">${goal || '—'}</div></div>
+      <div class="stat-box"><div class="stat-box-label">Progress</div><div class="stat-box-val" style="color:var(--green)">${goalPct===null?'—':goalPct+'%'}</div></div>
+    </div>
+    ${renderBarChart(months,maxVal,goal || null)}
+    <div class="insight">${goal?`<strong>${Math.max(goal-curr,0)} days left</strong> to reach this month’s goal.`:'Set a monthly goal if you want this tracker to show progress against target.'}</div>
+  </div>`;
+}
+
+function renderGrowthTrackers(){
+  renderGrowthTrackerList();
+  renderGrowthTrackerSelect();
+  buildGrowthCal();
+  renderGrowthCustomReport();
+}
+
+function growthCalPrev(){
+  growthCalView.month--;
+  if(growthCalView.month<0){ growthCalView.month=11; growthCalView.year--; }
+  renderGrowthTrackers();
+}
+function growthCalNext(){
+  growthCalView.month++;
+  if(growthCalView.month>11){ growthCalView.month=0; growthCalView.year++; }
+  renderGrowthTrackers();
+}
+
+function escapeHtml(value){
+  return String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+}
+
+// Override Growth switcher to include Custom tab while preserving existing Reading/Piano sections.
+function switchGrowth(tab){
+  const tabs = ['reading','piano','custom'];
+  document.querySelectorAll('#panel-growth > .report-tabs:first-child .report-tab').forEach((t,i)=>t.classList.toggle('active',tabs[i]===tab));
+  const reading = document.getElementById('growth-reading');
+  const piano = document.getElementById('growth-piano');
+  const custom = document.getElementById('growth-custom');
+  if(reading) reading.style.display = tab==='reading' ? 'block' : 'none';
+  if(piano) piano.style.display = tab==='piano' ? 'block' : 'none';
+  if(custom) custom.style.display = tab==='custom' ? 'block' : 'none';
+  if(tab==='custom') renderGrowthTrackers();
+}
+
+// Render once after boot creates the DOM. Safe if called before the Growth tab is opened.
+setTimeout(renderGrowthTrackers, 0);
+
+// ─── GROWTH CLEANUP: Optional Book Log + Custom Items ───
+// Book Log is no longer a forced default module for new users.
+// It remains visible automatically when the user already has book/reading history.
+// New users can enable it manually from the Custom tab.
+const BOOK_LOG_ENABLED_KEY = 'myos_book_log_enabled_v1';
+
+function renderPiano(){
+  // Kept as a safe no-op so older saved code paths do not break if called.
+}
+
+function hasBookLogHistory(){
+  const hasBooks = Array.isArray(state.books) && state.books.length > 0;
+  const hasReadingDays = state.readHeatmap && Object.values(state.readHeatmap).some(ids => Array.isArray(ids) && ids.length > 0);
+  return hasBooks || hasReadingDays;
+}
+
+function isBookLogEnabled(){
+  return localStorage.getItem(BOOK_LOG_ENABLED_KEY) === 'true' || hasBookLogHistory();
+}
+
+function enableBookLogModule(){
+  localStorage.setItem(BOOK_LOG_ENABLED_KEY, 'true');
+  syncGrowthModuleVisibility();
+  switchGrowth('reading');
+  showSaved();
+}
+
+function syncGrowthModuleVisibility(){
+  const enabled = isBookLogEnabled();
+  const readingTab = document.getElementById('growthReadingTab');
+  const customTab = document.getElementById('growthCustomTab');
+  const readingPanel = document.getElementById('growth-reading');
+  const customPanel = document.getElementById('growth-custom');
+  const enableCard = document.getElementById('bookLogEnableCard');
+  const overviewBookCard = document.getElementById('overviewBookCard');
+
+  if(readingTab) readingTab.style.display = enabled ? '' : 'none';
+  if(enableCard) enableCard.style.display = enabled ? 'none' : 'block';
+  if(overviewBookCard) overviewBookCard.style.display = enabled ? '' : 'none';
+
+  // If Book Log is not enabled, Custom should be the default visible Growth module.
+  if(!enabled){
+    if(readingPanel) readingPanel.style.display = 'none';
+    if(customPanel) customPanel.style.display = 'block';
+    if(readingTab) readingTab.classList.remove('active');
+    if(customTab) customTab.classList.add('active');
+  }
+}
+
+function switchGrowth(tab){
+  const bookEnabled = isBookLogEnabled();
+  if(tab === 'reading' && !bookEnabled) tab = 'custom';
+
+  const readingTab = document.getElementById('growthReadingTab');
+  const customTab = document.getElementById('growthCustomTab');
+  const reading = document.getElementById('growth-reading');
+  const custom = document.getElementById('growth-custom');
+
+  if(readingTab){
+    readingTab.style.display = bookEnabled ? '' : 'none';
+    readingTab.classList.toggle('active', tab === 'reading' && bookEnabled);
+  }
+  if(customTab) customTab.classList.toggle('active', tab === 'custom');
+  if(reading) reading.style.display = (tab === 'reading' && bookEnabled) ? 'block' : 'none';
+  if(custom) custom.style.display = tab === 'custom' ? 'block' : 'none';
+
+  syncGrowthModuleVisibility();
+  if(tab === 'custom' && typeof renderGrowthTrackers === 'function') renderGrowthTrackers();
+}
+
+function updateOverview(){
+  syncGrowthModuleVisibility();
+
+  const done=state.goals.filter(g=>g.done).length,total=state.goals.length;
+  document.getElementById('ov-goals').innerHTML=`${done}<span style="font-size:18px;color:var(--muted)">/${total}</span>`;
+  document.getElementById('ov-goal-bar').innerHTML=(state.goals.length?state.goals:[{}]).map(g=>`<div class="streak-seg ${g.done?'on':''}"></div>`).join('');
+
+  const y=todayObj.getFullYear(),m=todayObj.getMonth();
+  const prefix=monthKey(y,m)+'-';
+  const monthCount=Object.keys(state.fitnessHeatmap).filter(k=>k.startsWith(prefix)&&state.fitnessHeatmap[k]).length;
+  const goal=state.fitGoals[monthKey(y,m)];
+  document.getElementById('ov-workouts').textContent=monthCount;
+  document.getElementById('ov-workout-sub').textContent=goal?`of ${goal} goal`:'sessions this month';
+
+  const now2=new Date();
+  const curMk=monthKey(now2.getFullYear(),now2.getMonth());
+  const curMkTxs=state.transactions.filter(t=>t.monthKey===curMk);
+  const income=curMkTxs.filter(t=>t.type==='income').reduce((s,t)=>s+effectiveAmount(t),0);
+  const expense=curMkTxs.filter(t=>t.type==='expense').reduce((s,t)=>s+effectiveAmount(t),0);
+  const net=income-expense;
+  const balEl=document.getElementById('ov-balance');
+  balEl.textContent=(net>=0?'$':'-$')+Math.abs(net).toFixed(2);
+  balEl.style.color=net>=0?'var(--green)':'var(--pink)';
+
+  const ovBook=document.getElementById('ov-book');
+  if(ovBook && isBookLogEnabled()){
+    const reading=state.books.filter(b=>b.status==='reading');
+    if(reading.length) ovBook.innerHTML=reading.slice(0,2).map(b=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><div style="width:5px;height:5px;border-radius:50%;background:${b.color};flex-shrink:0;"></div><span style="color:var(--text);font-weight:500;font-size:13px;">${b.title}</span></div>`).join('')+(reading.length>2?`<div style="font-size:11px;color:var(--muted);">+${reading.length-2} more</div>`:'');
+    else ovBook.innerHTML='<span style="font-style:italic;font-size:13px;">No books in progress</span>';
+  }
+
+  const ovGrowth=document.getElementById('ov-growth-custom');
+  if(ovGrowth){
+    const trackers = (typeof growthTrackers !== 'undefined' && Array.isArray(growthTrackers)) ? growthTrackers : [];
+    if(trackers.length){
+      ovGrowth.innerHTML = trackers.slice(0,3).map(t=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><div style="width:5px;height:5px;border-radius:50%;background:var(--purple);flex-shrink:0;"></div><span style="color:var(--text);font-weight:500;font-size:13px;">${escapeHtml(t.name)}</span></div>`).join('') + (trackers.length>3?`<div style="font-size:11px;color:var(--muted);">+${trackers.length-3} more</div>`:'');
+    } else {
+      ovGrowth.innerHTML='<span style="font-style:italic;font-size:13px;">Add Piano, 3D course, journaling or any custom item</span>';
+    }
+  }
+
+  const streak=Object.values(state.fitnessHeatmap).filter(Boolean).length;
+  document.getElementById('streakPill').textContent=`🔥 ${streak} day streak`;
+}
+
+// Make sure a brand-new user lands on Custom, while existing readers keep Book Log visible.
+setTimeout(() => {
+  syncGrowthModuleVisibility();
+  if(!isBookLogEnabled()) switchGrowth('custom');
+}, 0);
+
+
+// ─── REBUILT GROWTH HABITS MODULE ───
+// Fresh Growth area: user-created habits, monthly heatmaps, end-of-month review, continue/complete loop.
+const GROWTH_GOALS_KEY_V2 = 'myos_growth_goals_v2';
+let growthGoals = loadFreshGrowthGoals();
+let growthSelectedGoalId = growthGoals.find(g => g.status === 'active')?.id || growthGoals[0]?.id || '';
+let growthOpenGoalId = growthSelectedGoalId || '';
+const freshGrowthCalView = { year: todayObj.getFullYear(), month: todayObj.getMonth() };
+
+function normaliseGrowthGoal(g){
+  return {
+    id: String(g.id || Date.now()),
+    name: g.name || 'Untitled habit',
+    icon: g.icon || '✨',
+    frequency: g.frequency || 'Daily',
+    targetDays: Math.max(1, Math.min(31, parseInt(g.targetDays || 12, 10) || 12)),
+    status: g.status || 'active',
+    createdAt: g.createdAt || new Date().toISOString(),
+    completedAt: g.completedAt || '',
+    days: g.days || {},
+    monthDecisions: g.monthDecisions || {}
+  };
+}
+function loadFreshGrowthGoals(){
+  try {
+    const parsed = JSON.parse(localStorage.getItem(GROWTH_GOALS_KEY_V2) || '[]');
+    return Array.isArray(parsed) ? parsed.map(normaliseGrowthGoal) : [];
+  } catch(e){ return []; }
+}
+function saveFreshGrowthGoals(){ localStorage.setItem(GROWTH_GOALS_KEY_V2, JSON.stringify(growthGoals)); }
+function activeGrowthGoals(){ return growthGoals.filter(g => g.status !== 'complete'); }
+function completedGrowthGoals(){ return growthGoals.filter(g => g.status === 'complete'); }
+function freshMonthKey(y = freshGrowthCalView.year, m = freshGrowthCalView.month){ return monthKey(y, m); }
+function getFreshSelectedGoal(){ return growthGoals.find(g => g.id === growthSelectedGoalId) || activeGrowthGoals()[0] || growthGoals[0] || null; }
+function growthGoalDays(goal, mk = freshMonthKey()){
+  if(!goal || !goal.days) return [];
+  return Object.keys(goal.days).filter(k => k.startsWith(mk + '-') && goal.days[k]);
+}
+function uniqueGrowthDaysThisMonth(){
+  const mk = monthKey(todayObj.getFullYear(), todayObj.getMonth());
+  const days = new Set();
+  activeGrowthGoals().forEach(g => growthGoalDays(g, mk).forEach(d => days.add(d)));
+  return days.size;
+}
+function growthDaysInMonth(y = freshGrowthCalView.year, m = freshGrowthCalView.month){ return new Date(y, m + 1, 0).getDate(); }
+function growthPct(goal, mk = freshMonthKey()){
+  const days = growthGoalDays(goal, mk).length;
+  const target = goal?.targetDays || growthDaysInMonth();
+  return target ? Math.min(100, Math.round((days / target) * 100)) : 0;
+}
+function growthBestStreak(goal, y = freshGrowthCalView.year, m = freshGrowthCalView.month){
+  const total = growthDaysInMonth(y, m);
+  let best = 0, cur = 0;
+  for(let d=1; d<=total; d++){
+    const key = dayKey(y, m, d);
+    if(goal?.days?.[key]){ cur++; best = Math.max(best, cur); }
+    else cur = 0;
+  }
+  return best;
+}
+function growthCreatedLabel(goal){
+  try {
+    const dt = new Date(goal.createdAt);
+    return `${MONTH_SHORT[dt.getMonth()]} ${dt.getFullYear()}`;
+  } catch(e){ return ''; }
+}
+function growthMonthsRunning(goal){
+  try {
+    const start = new Date(goal.createdAt);
+    const now = new Date(freshGrowthCalView.year, freshGrowthCalView.month, 1);
+    return Math.max(1, (now.getFullYear()-start.getFullYear())*12 + (now.getMonth()-start.getMonth()) + 1);
+  } catch(e){ return 1; }
+}
+function isGrowthMonthReadyToClose(y = freshGrowthCalView.year, m = freshGrowthCalView.month){
+  const now = new Date();
+  const selectedMonthStart = new Date(y, m, 1);
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const isPastMonth = selectedMonthStart < currentMonthStart;
+  const isCurrentMonth = y === now.getFullYear() && m === now.getMonth();
+  const lastDay = new Date(y, m + 1, 0).getDate();
+  return isPastMonth || (isCurrentMonth && now.getDate() >= lastDay - 2);
+}
+function growthReviewableGoals(){
+  const mk = freshMonthKey();
+  if(!isGrowthMonthReadyToClose()) return [];
+  return activeGrowthGoals().filter(g => !g.monthDecisions?.[mk]);
+}
+function growthGoalMonthData(goal, endY = freshGrowthCalView.year, endM = freshGrowthCalView.month, count = 12){
+  const months = [];
+  for(let i=count-1;i>=0;i--){
+    let mm = endM - i, yy = endY;
+    while(mm < 0){ mm += 12; yy--; }
+    const mk = monthKey(yy, mm);
+    const days = growthGoalDays(goal, mk).length;
+    const target = goal?.targetDays || growthDaysInMonth(yy, mm);
+    months.push({ y:yy, m:mm, mk, days, target, pct:target ? Math.min(100, Math.round(days/target*100)) : 0, label:MONTH_SHORT[mm] + (yy !== endY ? ` '${String(yy).slice(2)}` : ''), highlight:yy===endY && mm===endM });
+  }
+  return months;
+}
+function growthHasHistory(goal){
+  const decisions = Object.values(goal.monthDecisions || {});
+  const hasContinued = decisions.includes('continue');
+  const loggedMonths = new Set(Object.keys(goal.days || {}).filter(k => goal.days[k]).map(k => k.slice(0,7)));
+  return hasContinued || loggedMonths.size >= 2;
+}
+
+function openAddGrowthModal(){
+  const modal = document.getElementById('growthAddModal');
+  if(modal) modal.classList.add('open');
+  setTimeout(()=>document.getElementById('growthGoalName')?.focus(), 50);
+}
+function closeAddGrowthModal(){ document.getElementById('growthAddModal')?.classList.remove('open'); }
+function selectedGrowthEmoji(){ return document.querySelector('#growthEmojiPicker .growth-emoji-opt.selected')?.dataset.emoji || '✨'; }
+function addGrowthGoal(){
+  const nameEl = document.getElementById('growthGoalName');
+  const targetEl = document.getElementById('growthGoalTarget');
+  const frequencyEl = document.getElementById('growthGoalFrequency');
+  const name = (nameEl?.value || '').trim();
+  if(!name) return;
+  const exists = growthGoals.some(g => g.name.toLowerCase() === name.toLowerCase() && g.status !== 'complete');
+  if(exists && !confirm('This habit already exists. Add another one anyway?')) return;
+  const target = Math.max(1, Math.min(31, parseInt(targetEl?.value || '12', 10) || 12));
+  const goal = normaliseGrowthGoal({
+    id: Date.now().toString(), name, icon:selectedGrowthEmoji(), frequency:frequencyEl?.value || 'Daily', targetDays:target, status:'active', createdAt:new Date().toISOString(), days:{}, monthDecisions:{}
+  });
+  growthGoals.unshift(goal);
+  growthSelectedGoalId = goal.id;
+  growthOpenGoalId = goal.id;
+  if(nameEl) nameEl.value = '';
+  if(targetEl) targetEl.value = '12';
+  closeAddGrowthModal();
+  saveFreshGrowthGoals(); renderGrowthTrackers(); updateOverview(); showSaved();
+}
+function selectGrowthGoal(id){ growthSelectedGoalId = id; growthOpenGoalId = id; renderGrowthTrackers(); }
+function toggleGrowthCard(id){ growthOpenGoalId = growthOpenGoalId === id ? '' : id; growthSelectedGoalId = id; renderGrowthTrackers(); }
+function toggleGrowthDay(key, id){
+  const goal = growthGoals.find(g => g.id === id) || getFreshSelectedGoal();
+  if(!goal || goal.status === 'complete') return;
+  const keyDate = new Date(key + 'T00:00:00');
+  const today = new Date(todayObj.getFullYear(), todayObj.getMonth(), todayObj.getDate());
+  if(keyDate > today) return;
+  goal.days = goal.days || {};
+  goal.days[key] = !goal.days[key];
+  if(!goal.days[key]) delete goal.days[key];
+  saveFreshGrowthGoals(); renderGrowthTrackers(); updateOverview(); showSaved();
+}
+function deleteGrowthGoal(id){
+  if(!confirm('Delete this habit and its tracked days?')) return;
+  growthGoals = growthGoals.filter(g => g.id !== id);
+  if(growthSelectedGoalId === id) growthSelectedGoalId = activeGrowthGoals()[0]?.id || growthGoals[0]?.id || '';
+  if(growthOpenGoalId === id) growthOpenGoalId = growthSelectedGoalId;
+  saveFreshGrowthGoals(); renderGrowthTrackers(); updateOverview(); showSaved();
+}
+function markGrowthComplete(id){
+  const goal = growthGoals.find(g => g.id === id);
+  if(!goal) return;
+  const mk = freshMonthKey();
+  goal.status = 'complete';
+  goal.completedAt = new Date().toISOString();
+  goal.monthDecisions = goal.monthDecisions || {};
+  goal.monthDecisions[mk] = 'complete';
+  if(growthSelectedGoalId === id) growthSelectedGoalId = activeGrowthGoals()[0]?.id || growthGoals[0]?.id || '';
+  if(growthOpenGoalId === id) growthOpenGoalId = growthSelectedGoalId;
+  closeGrowthReport(); saveFreshGrowthGoals(); renderGrowthTrackers(); updateOverview(); showSaved();
+}
+function continueGrowthGoal(id){
+  const goal = growthGoals.find(g => g.id === id);
+  if(!goal) return;
+  const mk = freshMonthKey();
+  goal.monthDecisions = goal.monthDecisions || {};
+  goal.monthDecisions[mk] = 'continue';
+  closeGrowthReport(); saveFreshGrowthGoals(); renderGrowthTrackers(); showSaved();
+}
+function reopenGrowthGoal(id){
+  const goal = growthGoals.find(g => g.id === id);
+  if(!goal) return;
+  goal.status = 'active'; goal.completedAt = '';
+  growthSelectedGoalId = id; growthOpenGoalId = id;
+  saveFreshGrowthGoals(); renderGrowthTrackers(); updateOverview(); showSaved();
+}
+function openFirstGrowthReport(){ const first = growthReviewableGoals()[0] || getFreshSelectedGoal(); if(first) openGrowthReport(first.id); }
+function openGrowthReport(id){
+  const goal = growthGoals.find(g => g.id === id);
+  const el = document.getElementById('growthReportContent');
+  if(!goal || !el) return;
+  const mk = freshMonthKey();
+  const days = growthGoalDays(goal, mk).length;
+  const target = goal.targetDays || growthDaysInMonth();
+  const pct = target ? Math.min(100, Math.round(days/target*100)) : 0;
+  const months = growthGoalMonthData(goal, freshGrowthCalView.year, freshGrowthCalView.month, 3);
+  const prev = months[months.length-2];
+  const avg = Math.round(months.reduce((s,m)=>s+m.pct,0) / Math.max(1, months.filter(m=>m.days>0).length || months.length));
+  const monthLabel = `${MONTH_NAMES[freshGrowthCalView.month]} ${freshGrowthCalView.year}`;
+  const decision = goal.monthDecisions?.[mk];
+  el.innerHTML = `<div class="growth-report-header">
+      <div class="growth-report-icon-big">${escapeHtml(goal.icon || '✨')}</div>
+      <div><div class="growth-report-heading">${escapeHtml(goal.name)} — ${monthLabel}</div><div class="growth-report-subhead">Month ${growthMonthsRunning(goal)} of this habit</div></div>
+    </div>
+    <div class="growth-report-big-stat"><div class="growth-report-pct-num">${pct}%</div><div class="growth-report-pct-label">${days} out of ${target} target days completed</div></div>
+    <div class="growth-report-stats-row">
+      <div class="growth-report-stat-box"><div class="growth-report-stat-val">🔥 ${growthBestStreak(goal)}</div><div class="growth-report-stat-lbl">Best streak</div></div>
+      <div class="growth-report-stat-box"><div class="growth-report-stat-val" style="color:var(--green)">${prev ? prev.pct + '%' : '—'}</div><div class="growth-report-stat-lbl">Last month</div></div>
+      <div class="growth-report-stat-box"><div class="growth-report-stat-val" style="color:var(--muted)">${avg ? avg + '%' : '—'}</div><div class="growth-report-stat-lbl">Recent avg</div></div>
+    </div>
+    ${decision ? `<div class="card-sub" style="margin-bottom:12px;">Decision recorded: <strong>${decision === 'continue' ? 'Continue next month' : 'Complete'}</strong>.</div>` : `<div class="growth-report-decision-label">What would you like to do?</div>
+    <div class="growth-decision-btns">
+      <div class="growth-decision-btn complete" onclick="markGrowthComplete('${goal.id}')"><div class="growth-decision-icon">✅</div><div class="growth-decision-title">Complete</div><div class="growth-decision-desc">Archive this habit as done</div></div>
+      <div class="growth-decision-btn" onclick="continueGrowthGoal('${goal.id}')"><div class="growth-decision-icon">🔄</div><div class="growth-decision-title">Continue</div><div class="growth-decision-desc">Carry on into next month</div></div>
+    </div>`}`;
+  document.getElementById('growthReportModal')?.classList.add('open');
+}
+function closeGrowthReport(){ document.getElementById('growthReportModal')?.classList.remove('open'); }
+
+function renderGrowthHeatmap(goal){
+  const y = freshGrowthCalView.year, m = freshGrowthCalView.month;
+  const today = new Date(todayObj.getFullYear(), todayObj.getMonth(), todayObj.getDate());
+  const firstDay = new Date(y, m, 1).getDay();
+  const offset = (firstDay + 6) % 7;
+  const total = growthDaysInMonth(y, m);
+  let html = ['Mo','Tu','We','Th','Fr','Sa','Su'].map(d=>`<div class="growth-heatmap-day-label">${d}</div>`).join('');
+  for(let i=0;i<offset;i++) html += '<div class="growth-heatmap-cell empty"></div>';
+  for(let d=1; d<=total; d++){
+    const key = dayKey(y,m,d);
+    const keyDate = new Date(y,m,d);
+    const isFuture = keyDate > today;
+    const done = !!goal.days?.[key];
+    const isToday = todayObj.getFullYear()===y && todayObj.getMonth()===m && todayObj.getDate()===d;
+    html += `<div class="growth-heatmap-cell ${done?'done':''} ${isToday?'today':''} ${isFuture?'future':''}" title="${MONTH_NAMES[m]} ${d}" ${isFuture?'':`onclick="toggleGrowthDay('${key}','${goal.id}')"`}>${d}</div>`;
+  }
+  return html;
+}
+function renderGrowthMonthHistory(goal){
+  if(!growthHasHistory(goal)) return '';
+  const months = growthGoalMonthData(goal, freshGrowthCalView.year, freshGrowthCalView.month, 6).filter(m => m.days > 0 || m.highlight || goal.monthDecisions?.[m.mk]);
+  if(!months.length) return '';
+  return `<div class="growth-month-history"><div class="growth-heatmap-title" style="margin-bottom:10px;">Month-by-month progress</div>${months.map(m=>`<div class="growth-history-row"><div class="growth-history-month">${m.label}</div><div class="growth-history-bar-bg"><div class="growth-history-bar-fill" style="width:${m.pct}%;${m.highlight?'background:var(--blue)':''}"></div></div><div class="growth-history-pct" ${m.highlight?'style="color:var(--blue)"':''}>${m.pct}%</div></div>`).join('')}</div>`;
+}
+function renderGrowthCard(goal){
+  const mk = freshMonthKey();
+  const days = growthGoalDays(goal, mk).length;
+  const target = goal.targetDays || growthDaysInMonth();
+  const pct = target ? Math.min(100, Math.round(days/target*100)) : 0;
+  const missed = Math.max(0, Math.min(growthDaysInMonth(), new Date().getDate()) - days);
+  const best = growthBestStreak(goal);
+  const running = growthMonthsRunning(goal);
+  const isOpen = growthOpenGoalId === goal.id;
+  const canReport = isGrowthMonthReadyToClose() || goal.monthDecisions?.[mk];
+  return `<div class="growth-habit-card ${isOpen?'open':''}" id="growth-card-${goal.id}">
+    <div class="growth-habit-header" onclick="toggleGrowthCard('${goal.id}')">
+      <div class="growth-habit-icon">${escapeHtml(goal.icon || '✨')}</div>
+      <div class="growth-habit-title-block"><div class="growth-habit-name">${escapeHtml(goal.name)}</div><div class="growth-habit-meta">${escapeHtml(goal.frequency || 'Daily')} · Started ${growthCreatedLabel(goal)} ${running>1?`· <span class="growth-ongoing-badge">${running} months running</span>`:''}</div></div>
+      <div class="growth-streak">🔥 ${best}</div><div class="growth-habit-pct">${pct}%</div><div class="growth-chevron">▼</div>
+    </div>
+    <div class="growth-habit-body">
+      <div class="growth-body-grid">
+        <div class="growth-heatmap-panel">
+          <div class="growth-heatmap-head"><div class="growth-heatmap-title">${MONTH_NAMES[freshGrowthCalView.month]} ${freshGrowthCalView.year}</div></div>
+          <div class="growth-heatmap">${renderGrowthHeatmap(goal)}</div>
+        </div>
+        <div class="growth-side-panel">
+          <div class="growth-habit-stats"><div class="growth-stat-box"><div class="growth-stat-val">${days}</div><div class="growth-stat-lbl">days done</div></div><div class="growth-stat-box"><div class="growth-stat-val">${Math.max(0,target-days)}</div><div class="growth-stat-lbl">to target</div></div><div class="growth-stat-box"><div class="growth-stat-val">${best}</div><div class="growth-stat-lbl">best streak</div></div></div>
+          ${renderGrowthMonthHistory(goal)}
+          <div class="growth-habit-actions">${canReport?`<button class="growth-btn growth-btn-ghost growth-btn-sm" onclick="event.stopPropagation();openGrowthReport('${goal.id}')">📊 Monthly report</button>`:''}<button class="growth-btn growth-btn-ghost growth-btn-sm growth-danger" onclick="event.stopPropagation();deleteGrowthGoal('${goal.id}')">🗑 Delete</button></div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+function renderGrowthTrackers(){
+  growthGoals = growthGoals.map(normaliseGrowthGoal);
+  const active = activeGrowthGoals();
+  const completed = completedGrowthGoals();
+  if(!growthSelectedGoalId && active.length) growthSelectedGoalId = active[0].id;
+  if(!growthOpenGoalId && active.length) growthOpenGoalId = active[0].id;
+  const activeCount = document.getElementById('growth-active-count'); if(activeCount) activeCount.textContent = active.length;
+  const monthDays = document.getElementById('growth-month-days'); if(monthDays) monthDays.textContent = uniqueGrowthDaysThisMonth();
+  const completeCount = document.getElementById('growth-complete-count'); if(completeCount) completeCount.textContent = completed.length;
+  const empty = document.getElementById('growthEmptyState'); if(empty) empty.style.display = growthGoals.length ? 'none' : 'block';
+  const list = document.getElementById('growthHabitList'); if(list) list.innerHTML = active.map(renderGrowthCard).join('');
+  const completedSection = document.getElementById('growthCompletedSection');
+  const completedList = document.getElementById('growthCompletedList');
+  if(completedSection && completedList){
+    completedSection.style.display = completed.length ? 'block' : 'none';
+    completedList.innerHTML = completed.map(g => {
+      const allDays = Object.keys(g.days || {}).filter(k => g.days[k]).length;
+      const months = new Set(Object.keys(g.days || {}).filter(k => g.days[k]).map(k => k.slice(0,7))).size;
+      return `<div class="growth-completed-card"><div style="font-size:22px">${escapeHtml(g.icon || '✨')}</div><div class="growth-completed-info"><div class="growth-completed-name">${escapeHtml(g.name)}</div><div class="growth-completed-detail">Completed ${g.completedAt ? new Date(g.completedAt).toLocaleDateString('en-AU',{month:'short',year:'numeric'}) : ''} · ${allDays} tracked days · ${months} month${months===1?'':'s'}</div></div><button class="growth-btn growth-btn-ghost growth-btn-sm" onclick="reopenGrowthGoal('${g.id}')">Reopen</button><div class="growth-completed-badge">✓ DONE</div></div>`;
+    }).join('');
+  }
+  renderGrowthEomBanner();
+}
+function renderGrowthEomBanner(){
+  const banner = document.getElementById('growthEomBanner');
+  if(!banner) return;
+  const reviewable = growthReviewableGoals();
+  if(!reviewable.length){ banner.style.display = 'none'; return; }
+  banner.style.display = 'flex';
+  const title = document.getElementById('growthEomTitle');
+  const sub = document.getElementById('growthEomSub');
+  if(title) title.textContent = `${MONTH_NAMES[freshGrowthCalView.month]} is wrapping up — review your habits`;
+  if(sub) sub.textContent = `${reviewable.length} habit${reviewable.length===1?'':'s'} ready for end-of-month review. Decide to complete or carry on.`;
+}
+
+// Modal helpers/listeners
+function setupGrowthUiListeners(){
+  document.querySelectorAll('.growth-modal-overlay').forEach(el => {
+    if(el.dataset.ready) return;
+    el.dataset.ready = '1';
+    el.addEventListener('click', e => { if(e.target === el) el.classList.remove('open'); });
+  });
+  document.querySelectorAll('.growth-emoji-opt').forEach(opt => {
+    if(opt.dataset.ready) return;
+    opt.dataset.ready = '1';
+    opt.addEventListener('click', () => {
+      opt.closest('.growth-emoji-picker').querySelectorAll('.growth-emoji-opt').forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+    });
+  });
+  const input = document.getElementById('growthGoalName');
+  if(input && !input.dataset.ready){ input.dataset.ready='1'; input.addEventListener('keydown', e => { if(e.key === 'Enter') addGrowthGoal(); }); }
+}
+
+// Legacy no-op overrides so old Reading/Piano modules do not appear.
+function renderBooks(){}
+function updateReadCalBookSelect(){}
+function buildReadCal(){}
+function renderReadReports(){}
+function renderPiano(){}
+function switchGrowth(){ renderGrowthTrackers(); }
+
+function updateOverview(){
+  const done=state.goals.filter(g=>g.done).length,total=state.goals.length;
+  const ovGoals = document.getElementById('ov-goals');
+  if(ovGoals) ovGoals.innerHTML=`${done}<span style="font-size:18px;color:var(--muted)">/${total}</span>`;
+  const ovGoalBar = document.getElementById('ov-goal-bar');
+  if(ovGoalBar) ovGoalBar.innerHTML=(state.goals.length?state.goals:[{}]).map(g=>`<div class="streak-seg ${g.done?'on':''}"></div>`).join('');
+
+  const y=todayObj.getFullYear(),m=todayObj.getMonth();
+  const prefix=monthKey(y,m)+'-';
+  const monthCount=Object.keys(state.fitnessHeatmap).filter(k=>k.startsWith(prefix)&&state.fitnessHeatmap[k]).length;
+  const goal=state.fitGoals[monthKey(y,m)];
+  const ovWorkouts = document.getElementById('ov-workouts');
+  if(ovWorkouts) ovWorkouts.textContent=monthCount;
+  const ovWorkoutSub = document.getElementById('ov-workout-sub');
+  if(ovWorkoutSub) ovWorkoutSub.textContent=goal?`of ${goal} goal`:'sessions this month';
+
+  const curMk=monthKey(todayObj.getFullYear(),todayObj.getMonth());
+  const curMkTxs=state.transactions.filter(t=>t.monthKey===curMk);
+  const income=curMkTxs.filter(t=>t.type==='income').reduce((s,t)=>s+effectiveAmount(t),0);
+  const expense=curMkTxs.filter(t=>t.type==='expense').reduce((s,t)=>s+effectiveAmount(t),0);
+  const net=income-expense;
+  const balEl=document.getElementById('ov-balance');
+  if(balEl){ balEl.textContent=(net>=0?'$':'-$')+Math.abs(net).toFixed(2); balEl.style.color=net>=0?'var(--green)':'var(--pink)'; }
+
+  const focus = document.getElementById('ov-growth-focus');
+  if(focus){
+    const active = activeGrowthGoals();
+    focus.innerHTML = active.length ? active.slice(0,3).map(g=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><span>${escapeHtml(g.icon || '✨')}</span><span style="color:var(--text);font-weight:500;font-size:13px;">${escapeHtml(g.name)}</span></div>`).join('') + (active.length>3?`<div style="font-size:11px;color:var(--muted);">+${active.length-3} more</div>`:'') : '<span style="font-style:italic;font-size:13px;">No growth habits yet</span>';
+  }
+  const growthMonth = document.getElementById('ov-growth-month');
+  if(growthMonth){
+    const days = uniqueGrowthDaysThisMonth();
+    const active = activeGrowthGoals().length;
+    growthMonth.innerHTML = days ? `<strong style="color:var(--purple);font-size:16px;">${days}</strong> day${days===1?'':'s'} tracked across ${active} active habit${active===1?'':'s'}` : '<span style="font-style:italic;font-size:13px;">No days tracked yet</span>';
+  }
+  const streak=Object.values(state.fitnessHeatmap).filter(Boolean).length;
+  const streakPill = document.getElementById('streakPill');
+  if(streakPill) streakPill.textContent=`🔥 ${streak} day streak`;
+}
+
+// Boot after all overrides are loaded.
+const originalBoot = boot;
+boot = async function(){
+  await originalBoot();
+  setupGrowthUiListeners();
+  renderGrowthTrackers();
+  updateOverview();
+};
 boot();
