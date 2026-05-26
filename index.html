@@ -61,15 +61,12 @@
   </div>
   <div class="grid-2">
     <div class="card">
-      <div class="card-label">Currently reading</div>
-      <div id="ov-book" style="font-size:13px;color:var(--muted);font-style:italic;">No book added yet</div>
+      <div class="card-label">Growth focus</div>
+      <div id="ov-growth-focus" style="font-size:13px;color:var(--muted);font-style:italic;">No growth goals yet</div>
     </div>
     <div class="card">
-      <div class="card-label">Piano practice</div>
-      <div id="ov-piano" style="font-size:13px;color:var(--muted);">No sessions logged</div>
-      <div class="progress-wrap" id="ov-piano-bar" style="display:none">
-        <div class="progress-bar"><div class="progress-fill" id="ov-piano-fill" style="background:var(--purple)"></div></div>
-      </div>
+      <div class="card-label">Growth this month</div>
+      <div id="ov-growth-month" style="font-size:13px;color:var(--muted);font-style:italic;">No days tracked yet</div>
     </div>
   </div>
   <div class="section-title" style="margin-top:8px;">📊 Fitness Reports</div>
@@ -350,66 +347,98 @@
 
 <!-- GROWTH -->
 <div class="panel" id="panel-growth">
-  <div class="report-tabs" style="margin-bottom:20px;">
-    <button class="report-tab active" onclick="switchGrowth('reading')">📚 Reading</button>
-    <button class="report-tab" onclick="switchGrowth('piano')">🎹 Piano</button>
+  <div class="growth-shell">
+    <div class="growth-eom-banner" id="growthEomBanner" style="display:none;">
+      <div class="growth-eom-icon">📋</div>
+      <div class="growth-eom-text">
+        <h3 id="growthEomTitle">Month-end growth review</h3>
+        <p id="growthEomSub">Review your growth goals and decide what continues next month.</p>
+      </div>
+      <div class="growth-eom-actions">
+        <button class="growth-btn growth-btn-complete growth-btn-sm" onclick="openFirstGrowthReport()">Review</button>
+      </div>
+    </div>
+
+    <div class="growth-topbar">
+      <div>
+        <div class="growth-section-label">Growth</div>
+        <h2>Build, track, then close the loop.</h2>
+        <p>Start fresh with the growth goals that matter now. Track them month by month, then decide whether to continue or complete each one at month end.</p>
+      </div>
+      <button class="growth-btn growth-btn-primary" onclick="openAddGrowthModal()">+ Add new habit</button>
+    </div>
+
+    <div class="grid-3 growth-summary-grid">
+      <div class="card"><div class="card-label">Active habits</div><div class="card-value" id="growth-active-count" style="color:var(--blue)">0</div><div class="card-sub">currently tracking</div></div>
+      <div class="card"><div class="card-label">Tracked this month</div><div class="card-value" id="growth-month-days" style="color:var(--purple)">0</div><div class="card-sub">unique days completed</div></div>
+      <div class="card"><div class="card-label">Closed loops</div><div class="card-value" id="growth-complete-count" style="color:var(--green)">0</div><div class="card-sub">completed habits</div></div>
+    </div>
+
+    <div class="growth-section-label">Active Habits</div>
+    <div class="growth-empty-state" id="growthEmptyState" style="display:none;">
+      <div style="font-size:30px;margin-bottom:8px;">🌱</div>
+      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;margin-bottom:4px;">No growth habits yet</div>
+      <div class="card-sub" style="margin-bottom:14px;">Add a goal such as reading, 3D course, coding, language learning or journaling.</div>
+      <button class="growth-btn growth-btn-primary" onclick="openAddGrowthModal()">+ Add your first habit</button>
+    </div>
+    <div class="growth-habits-grid" id="growthHabitList"></div>
+
+    <button class="growth-btn growth-btn-ghost growth-add-full" onclick="openAddGrowthModal()">+ Add new habit</button>
+
+    <div class="growth-completed-section" id="growthCompletedSection" style="display:none;">
+      <div class="growth-section-label">Completed</div>
+      <div id="growthCompletedList"></div>
+    </div>
   </div>
-  <div id="growth-reading">
-    <div class="grid-3" style="margin-bottom:16px;">
-      <div class="card"><div class="card-label">Currently reading</div><div class="card-value" id="read-active-count" style="color:var(--blue)">0</div><div class="card-sub">books in progress</div></div>
-      <div class="card"><div class="card-label">Finished this year</div><div class="card-value" id="read-finished-count" style="color:var(--green)">0</div><div class="card-sub">books completed</div></div>
-      <div class="card"><div class="card-label">Reading days this month</div><div class="card-value" id="read-days-month" style="color:var(--purple)">0</div><div class="card-sub">days marked</div></div>
-    </div>
-    <div class="grid-2">
-      <div class="card">
-        <div class="card-label">My books</div>
-        <div id="bookList"><div style="color:var(--muted);font-size:13px;padding:8px 0;">No books yet.</div></div>
-        <div class="add-row" style="margin-top:12px;flex-wrap:wrap;gap:8px;">
-          <input class="add-input" id="bookTitle" placeholder="Title…">
-          <input class="add-input" id="bookAuthor" placeholder="Author…" style="max-width:130px;">
-          <input type="date" id="bookStartDate" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;outline:none;">
-          <select id="bookStatusInput"><option value="reading">Reading</option><option value="finished">Finished</option><option value="paused">Paused</option></select>
-          <button class="add-btn" onclick="addBook()">+ Add</button>
+
+  <div class="growth-modal-overlay" id="growthAddModal">
+    <div class="growth-modal">
+      <h2>New Habit</h2>
+      <div class="growth-form-row">
+        <label class="growth-form-label">Name</label>
+        <input class="growth-form-input" id="growthGoalName" type="text" placeholder="e.g. Reading, coding, Spanish…">
+      </div>
+      <div class="growth-form-row">
+        <label class="growth-form-label">Icon</label>
+        <div class="growth-emoji-picker" id="growthEmojiPicker">
+          <div class="growth-emoji-opt selected" data-emoji="📖">📖</div>
+          <div class="growth-emoji-opt" data-emoji="💻">💻</div>
+          <div class="growth-emoji-opt" data-emoji="🇪🇸">🇪🇸</div>
+          <div class="growth-emoji-opt" data-emoji="🧘">🧘</div>
+          <div class="growth-emoji-opt" data-emoji="🎸">🎸</div>
+          <div class="growth-emoji-opt" data-emoji="✍️">✍️</div>
+          <div class="growth-emoji-opt" data-emoji="🏃">🏃</div>
+          <div class="growth-emoji-opt" data-emoji="🎨">🎨</div>
+          <div class="growth-emoji-opt" data-emoji="📚">📚</div>
+          <div class="growth-emoji-opt" data-emoji="✨">✨</div>
         </div>
       </div>
-      <div class="card">
-        <div class="card-label">Reading calendar
-          <select id="readCalBookSelect" style="margin-left:8px;font-size:11px;padding:4px 8px;" onchange="buildReadCal()">
-            <option value="__all__">All books</option>
-          </select>
-        </div>
-        <div class="cal-header">
-          <button class="cal-nav" onclick="readCalPrev()">‹</button>
-          <span class="cal-month-label" id="readCalLabel"></span>
-          <button class="cal-nav" onclick="readCalNext()">›</button>
-        </div>
-        <div class="cal-dow"><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span></div>
-        <div class="cal-grid" id="readCalGrid"></div>
+      <div class="growth-form-row">
+        <label class="growth-form-label">Frequency</label>
+        <select class="growth-form-input" id="growthGoalFrequency">
+          <option value="Daily">Daily</option>
+          <option value="Weekdays only">Weekdays only</option>
+          <option value="Weekends only">Weekends only</option>
+          <option value="Flexible">Flexible</option>
+        </select>
+      </div>
+      <div class="growth-form-row">
+        <label class="growth-form-label">Monthly target days</label>
+        <input class="growth-form-input" id="growthGoalTarget" type="number" min="1" max="31" value="12">
+      </div>
+      <div class="growth-modal-footer">
+        <button class="growth-btn growth-btn-ghost" onclick="closeAddGrowthModal()">Cancel</button>
+        <button class="growth-btn growth-btn-primary" onclick="addGrowthGoal()">Create Habit</button>
       </div>
     </div>
-    <div class="section-title" style="margin-top:8px;">📊 Reading Reports</div>
-    <div class="report-tabs">
-      <button class="report-tab active" onclick="switchReadReport('monthly')">Monthly</button>
-      <button class="report-tab" onclick="switchReadReport('yearly')">Yearly</button>
-    </div>
-    <div id="read-report-monthly"></div>
-    <div id="read-report-yearly" style="display:none;"></div>
   </div>
-  <div id="growth-piano" style="display:none;">
-    <div class="card" style="max-width:480px;">
-      <div class="card-label">🎹 Piano practice</div>
-      <div class="card-value" id="piano-mins" style="color:var(--purple)">0 <span style="font-size:16px;color:var(--muted)">min</span></div>
-      <div class="card-sub">total logged</div>
-      <div class="progress-wrap">
-        <div class="progress-label"><span>Goal: 90 min/week</span><span id="piano-pct">0%</span></div>
-        <div class="progress-bar"><div class="progress-fill" id="piano-bar" style="background:var(--purple);width:0%"></div></div>
+
+  <div class="growth-modal-overlay" id="growthReportModal">
+    <div class="growth-modal growth-report-modal">
+      <div id="growthReportContent"></div>
+      <div style="margin-top:14px;text-align:right;">
+        <button class="growth-btn growth-btn-ghost growth-btn-sm" onclick="closeGrowthReport()">Close</button>
       </div>
-      <div class="add-row" style="margin-top:14px">
-        <input class="number-input" id="pianoMins" placeholder="min" type="number" min="1">
-        <input class="add-input" id="pianoNote" placeholder="What did you practice?">
-        <button class="add-btn" onclick="logPiano()">Log</button>
-      </div>
-      <div id="pianoLog" style="margin-top:10px;font-size:12px;color:var(--muted);"></div>
     </div>
   </div>
 </div>
