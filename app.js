@@ -3,6 +3,10 @@ const SUPABASE_URL = 'https://vuovbkbdxjxsiuflbrdn.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1b3Zia2JkeGp4c2l1ZmxicmRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzNTkyMjQsImV4cCI6MjA5NDkzNTIyNH0.z5ta4K_bDHD6xkWQ44AZuQg1JMR0N6Vmpza6ZOCscus';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// ─── AUTH STATE ───
+let currentUser = null;
+let authMode = 'login';
+
 // ─── LOCAL STATE (loaded from Supabase on boot) ───
 const state = {
   goals: [], workouts: [], fitnessHeatmap: {}, fitGoals: {},
@@ -62,6 +66,78 @@ const CAT_COLORS = CAT_COLOR_PALETTE;
 const catColors = {life:{bg:'#1a2a1a',color:'var(--green)'},fitness:{bg:'#1a1e2e',color:'var(--blue)'},finance:{bg:'#2e2a1a',color:'var(--orange)'},growth:{bg:'#2a1a2e',color:'var(--purple)'},career:{bg:'#2e1a1a',color:'var(--pink)'}};
 const catLabels = {life:'🌱 Life',fitness:'💪 Fitness',finance:'💰 Finance',growth:'📚 Growth',career:'💼 Career'};
 
+
+// ─── AUTH HELPERS ───
+function showAuthScreen(message='', type=''){
+  document.getElementById('loading').style.display='none';
+  document.getElementById('app').style.display='none';
+  const auth=document.getElementById('authScreen');
+  if(auth) auth.style.display='flex';
+  setAuthMessage(message,type);
+}
+function showAppScreen(){
+  document.getElementById('loading').style.display='none';
+  const auth=document.getElementById('authScreen');
+  if(auth) auth.style.display='none';
+  document.getElementById('app').style.display='block';
+  const pill=document.getElementById('userEmailPill');
+  if(pill && currentUser?.email){pill.style.display='inline-block';pill.textContent=currentUser.email;}
+}
+function setAuthMode(mode){
+  authMode=mode;
+  document.getElementById('loginTab')?.classList.toggle('active',mode==='login');
+  document.getElementById('signupTab')?.classList.toggle('active',mode==='signup');
+  const btn=document.getElementById('authSubmitBtn');
+  if(btn) btn.textContent=mode==='login'?'Log in':'Create account';
+  const pass=document.getElementById('authPassword');
+  if(pass) pass.setAttribute('autocomplete', mode==='login'?'current-password':'new-password');
+  setAuthMessage('','');
+}
+function setAuthMessage(message,type=''){
+  const el=document.getElementById('authMessage');
+  if(!el) return;
+  el.textContent=message||'';
+  el.className='auth-message '+(type||'');
+}
+async function submitAuth(){
+  const email=document.getElementById('authEmail')?.value.trim();
+  const password=document.getElementById('authPassword')?.value;
+  const btn=document.getElementById('authSubmitBtn');
+  if(!email||!password){setAuthMessage('Enter your email and password.','error');return;}
+  if(password.length<6){setAuthMessage('Password needs to be at least 6 characters.','error');return;}
+  btn.disabled=true; btn.textContent=authMode==='login'?'Logging in…':'Creating account…';
+  try{
+    const res=authMode==='login'
+      ? await sb.auth.signInWithPassword({email,password})
+      : await sb.auth.signUp({email,password});
+    if(res.error){setAuthMessage(res.error.message,'error');return;}
+    if(authMode==='signup' && !res.data.session){
+      setAuthMessage('Account created. Check your email to confirm, then log in.','success');
+      setAuthMode('login');
+      return;
+    }
+    currentUser=res.data.user || res.data.session?.user;
+    await loadAppData();
+  }catch(e){
+    console.error(e); setAuthMessage('Something went wrong. Please try again.','error');
+  }finally{
+    btn.disabled=false; btn.textContent=authMode==='login'?'Log in':'Create account';
+  }
+}
+async function logoutUser(){
+  await sb.auth.signOut();
+  currentUser=null;
+  state.goals=[]; state.workouts=[]; state.fitnessHeatmap={}; state.fitGoals={};
+  state.transactions=[]; state.budgets={}; state.books=[]; state.readHeatmap={}; state.piano=[]; state.categories=[];
+  showAuthScreen('Logged out.','success');
+}
+sb.auth.onAuthStateChange((event, session)=>{
+  if(event==='SIGNED_OUT'){
+    currentUser=null;
+    showAuthScreen();
+  }
+});
+
 // ─── SAVE INDICATOR ───
 let saveTimer = null;
 function showSaved(){
@@ -71,8 +147,17 @@ function showSaved(){
   saveTimer = setTimeout(()=>p.classList.add('hidden'), 1800);
 }
 
-// ─── BOOT: LOAD ALL DATA ───
+// ─── BOOT: CHECK AUTH, THEN LOAD DATA ───
 async function boot(){
+  const {data:{session},error}=await sb.auth.getSession();
+  if(error){console.error('Auth session error:',error);}
+  if(!session){showAuthScreen();return;}
+  currentUser=session.user;
+  await loadAppData();
+}
+
+// ─── LOAD ALL DATA ───
+async function loadAppData(){
   try {
     const [goals, workouts, fheat, fgoals, txs, budgets, books, rheat, piano, cats] = await Promise.all([
       sb.from('goals').select('*'),
@@ -101,8 +186,7 @@ async function boot(){
     saveCategoryTypes();
   } catch(e){ console.error('Boot error:', e); }
 
-  document.getElementById('loading').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
+  showAppScreen();
   document.getElementById('dateDisplay').textContent = todayObj.toLocaleDateString('en-AU',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
 
   renderGoals(); renderWorkouts(); buildCalendar(); updateFitGoalDisplay();
