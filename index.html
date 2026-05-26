@@ -16,6 +16,31 @@
   Loading your OS…
 </div>
 
+<div id="authScreen" class="auth-screen" style="display:none;">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <h1>My <span>OS</span></h1>
+      <p>Your private personal operating system.</p>
+    </div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="loginTab" onclick="setAuthMode('login')">Log in</button>
+      <button class="auth-tab" id="signupTab" onclick="setAuthMode('signup')">Sign up</button>
+    </div>
+
+    <div class="auth-form">
+      <label>Email</label>
+      <input id="authEmail" type="email" placeholder="you@example.com" autocomplete="email">
+
+      <label>Password</label>
+      <input id="authPassword" type="password" placeholder="Minimum 6 characters" autocomplete="current-password" onkeydown="if(event.key==='Enter') submitAuth()">
+
+      <button class="auth-submit" id="authSubmitBtn" onclick="submitAuth()">Log in</button>
+      <div class="auth-message" id="authMessage"></div>
+    </div>
+  </div>
+</div>
+
 <div id="app" style="display:none;">
 
 <div class="header">
@@ -23,9 +48,11 @@
     <h1>My <span>OS</span></h1>
     <div class="date" id="dateDisplay"></div>
   </div>
-  <div style="display:flex;gap:8px;align-items:center;">
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
     <span class="pill save-pill hidden" id="savePill">✓ Saved</span>
     <span class="pill" style="background:#1a2e1a;color:var(--green);" id="streakPill">🔥 0 day streak</span>
+    <span class="pill user-pill" id="userEmailPill" style="display:none;"></span>
+    <button class="logout-btn" onclick="logoutUser()">Log out</button>
   </div>
 </div>
 
