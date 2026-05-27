@@ -2922,6 +2922,19 @@ setTimeout(() => {
 }, 0);
 
 
+
+function myosUuid(){
+  if(window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+function isUuidLike(value){
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
+}
+
 // ─── REBUILT GROWTH HABITS MODULE ───
 // Fresh Growth area: user-created habits, monthly heatmaps, end-of-month review, continue/complete loop.
 const GROWTH_GOALS_KEY_V2 = 'myos_growth_goals_v2';
@@ -2932,7 +2945,7 @@ const freshGrowthCalView = { year: todayObj.getFullYear(), month: todayObj.getMo
 
 function normaliseGrowthGoal(g){
   return {
-    id: String(g.id || Date.now()),
+    id: isUuidLike(g.id) ? String(g.id) : myosUuid(),
     name: g.name || 'Untitled habit',
     icon: g.icon || '✨',
     frequency: g.frequency || 'Daily',
@@ -2950,24 +2963,55 @@ function loadFreshGrowthGoalsLocal(){
     return Array.isArray(parsed) ? parsed.map(normaliseGrowthGoal) : [];
   } catch(e){ return []; }
 }
+function growthGoalFromRow(row){
+  if(row.goal && typeof row.goal === 'object') return normaliseGrowthGoal({...row.goal, id: row.id});
+  return normaliseGrowthGoal({
+    id: row.id,
+    name: row.name,
+    icon: row.icon,
+    frequency: row.frequency || 'Daily',
+    targetDays: row.target_days,
+    status: row.status,
+    createdAt: row.created_at,
+    completedAt: row.completed_at,
+    days: row.days || {},
+    monthDecisions: row.month_decisions || {}
+  });
+}
 async function loadFreshGrowthGoalsFromSupabase(){
   try{
-    const {data,error} = await sb.from('growth_goals').select('id,goal,updated_at').order('updated_at',{ascending:false});
-    if(error){ console.warn('Growth Supabase load fallback:', error.message); growthGoals = loadFreshGrowthGoalsLocal(); return; }
+    const {data,error} = await sb.from('growth_goals').select('*').order('updated_at',{ascending:false});
+    if(error){ console.warn('Growth Supabase load fallback:', error.message); growthGoals = loadFreshGrowthGoalsLocal().map(normaliseGrowthGoal); return; }
     if(data && data.length){
-      growthGoals = data.map(r=>normaliseGrowthGoal({...r.goal, id:r.id}));
+      growthGoals = data.map(growthGoalFromRow);
       localStorage.setItem(GROWTH_GOALS_KEY_V2, JSON.stringify(growthGoals));
     } else {
-      growthGoals = loadFreshGrowthGoalsLocal();
+      growthGoals = loadFreshGrowthGoalsLocal().map(normaliseGrowthGoal);
+      localStorage.setItem(GROWTH_GOALS_KEY_V2, JSON.stringify(growthGoals));
       if(growthGoals.length) syncFreshGrowthGoalsToSupabase();
     }
     growthSelectedGoalId = growthGoals.find(g => g.status === 'active')?.id || growthGoals[0]?.id || '';
     growthOpenGoalId = growthSelectedGoalId || '';
-  }catch(e){ console.warn('Growth load failed:', e); growthGoals = loadFreshGrowthGoalsLocal(); }
+  }catch(e){ console.warn('Growth load failed:', e); growthGoals = loadFreshGrowthGoalsLocal().map(normaliseGrowthGoal); }
 }
 function syncFreshGrowthGoalsToSupabase(){
   if(!currentUser || !Array.isArray(growthGoals)) return;
-  const rows = growthGoals.map(g=>({ id:String(g.id), user_id:currentUser.id, goal:normaliseGrowthGoal(g), updated_at:new Date().toISOString() }));
+  growthGoals = growthGoals.map(normaliseGrowthGoal);
+  localStorage.setItem(GROWTH_GOALS_KEY_V2, JSON.stringify(growthGoals));
+  const rows = growthGoals.map(g=>({
+    id: String(g.id),
+    user_id: currentUser.id,
+    name: g.name,
+    icon: g.icon,
+    frequency: g.frequency || 'Daily',
+    target_days: g.targetDays || 12,
+    status: g.status || 'active',
+    created_at: g.createdAt || new Date().toISOString(),
+    completed_at: g.completedAt || null,
+    days: g.days || {},
+    month_decisions: g.monthDecisions || {},
+    updated_at: new Date().toISOString()
+  }));
   if(rows.length) sb.from('growth_goals').upsert(rows,{onConflict:'id'}).then(({error})=>{ if(error) console.warn('Growth sync failed:',error.message); });
 }
 function saveFreshGrowthGoals(){
@@ -3067,7 +3111,7 @@ function addGrowthGoal(){
   if(exists && !confirm('This habit already exists. Add another one anyway?')) return;
   const target = Math.max(1, Math.min(31, parseInt(targetEl?.value || '12', 10) || 12));
   const goal = normaliseGrowthGoal({
-    id: Date.now().toString(), name, icon:selectedGrowthEmoji(), frequency:frequencyEl?.value || 'Daily', targetDays:target, status:'active', createdAt:new Date().toISOString(), days:{}, monthDecisions:{}
+    id: myosUuid(), name, icon:selectedGrowthEmoji(), frequency:frequencyEl?.value || 'Daily', targetDays:target, status:'active', createdAt:new Date().toISOString(), days:{}, monthDecisions:{}
   });
   growthGoals.unshift(goal);
   growthSelectedGoalId = goal.id;
@@ -3339,7 +3383,7 @@ function workMeetingProject(m){ return escapeHtml(m.project || m.topic || ''); }
 function workMeetingPeople(m){ return escapeHtml(m.people || ''); }
 function normaliseWorkMeeting(m){
   return {
-    id: String(m.id || Date.now()),
+    id: isUuidLike(m.id) ? String(m.id) : myosUuid(),
     title: m.title || 'Untitled meeting',
     meeting_date: m.meeting_date || m.date || workSelectedDate,
     project: m.project || '',
@@ -3460,13 +3504,41 @@ async function saveWorkMeeting(){
   const title=document.getElementById('workMeetingTitle').value.trim();
   const date=document.getElementById('workMeetingDate').value;
   if(!title||!date){ alert('Meeting title and date are required.'); return; }
-  const id=workEditingMeetingId || String(Date.now());
-  const row={id, user_id:currentUser?.id, title, meeting_date:date, project:document.getElementById('workMeetingProject').value.trim(), people:document.getElementById('workMeetingPeople').value.trim(), meeting_type:document.getElementById('workMeetingType').value, note_html:document.getElementById('workNoteEditor').innerHTML, textboxes:collectWorkTextboxes(), followups:collectWorkFollowups(), updated_at:new Date().toISOString()};
-  const {error}=await sb.from('work_meetings').upsert(row,{onConflict:'id'});
+  if(!currentUser?.id){ alert('Please log in again before saving a meeting.'); return; }
+
+  const payload={
+    user_id: currentUser.id,
+    title,
+    meeting_date: date,
+    project: document.getElementById('workMeetingProject').value.trim(),
+    people: document.getElementById('workMeetingPeople').value.trim(),
+    meeting_type: document.getElementById('workMeetingType').value,
+    note_html: document.getElementById('workNoteEditor').innerHTML,
+    textboxes: collectWorkTextboxes(),
+    followups: collectWorkFollowups(),
+    updated_at: new Date().toISOString()
+  };
+
+  let data, error;
+  if(workEditingMeetingId){
+    ({data,error}=await sb.from('work_meetings')
+      .update(payload)
+      .eq('id', String(workEditingMeetingId))
+      .eq('user_id', currentUser.id)
+      .select()
+      .single());
+  } else {
+    ({data,error}=await sb.from('work_meetings')
+      .insert(payload)
+      .select()
+      .single());
+  }
+
   if(error){ console.error(error); alert('Could not save meeting: '+error.message); return; }
-  const existing=state.workMeetings.findIndex(m=>String(m.id)===String(id));
-  if(existing>=0) state.workMeetings[existing]=normaliseWorkMeeting(row); else state.workMeetings.unshift(normaliseWorkMeeting({...row, created_at:new Date().toISOString()}));
-  workSelectedDate=date; closeWorkMeetingModal(); renderWorkTab(); showSaved();
+  const saved=normaliseWorkMeeting(data || payload);
+  const existing=state.workMeetings.findIndex(m=>String(m.id)===String(saved.id));
+  if(existing>=0) state.workMeetings[existing]=saved; else state.workMeetings.unshift(saved);
+  workSelectedDate=date; workEditingMeetingId=''; closeWorkMeetingModal(); renderWorkTab(); showSaved();
 }
 async function deleteWorkMeeting(id){
   if(!confirm('Delete this meeting?')) return;
