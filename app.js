@@ -11,7 +11,7 @@ let authMode = 'login';
 const state = {
   goals: [], workouts: [], fitnessHeatmap: {}, fitGoals: {},
   transactions: [], budgets: {}, books: [], readHeatmap: {}, piano: [],
-  categories: []
+  categories: [], workMeetings: []
 };
 
 const todayObj = new Date();
@@ -128,7 +128,7 @@ async function logoutUser(){
   await sb.auth.signOut();
   currentUser=null;
   state.goals=[]; state.workouts=[]; state.fitnessHeatmap={}; state.fitGoals={};
-  state.transactions=[]; state.budgets={}; state.books=[]; state.readHeatmap={}; state.piano=[]; state.categories=[];
+  state.transactions=[]; state.budgets={}; state.books=[]; state.readHeatmap={}; state.piano=[]; state.categories=[]; state.workMeetings=[];
   showAuthScreen('Logged out.','success');
 }
 sb.auth.onAuthStateChange((event, session)=>{
@@ -184,6 +184,8 @@ async function loadAppData(){
     if(!state.categories.length) state.categories = [...DEFAULT_CATEGORIES];
     getCategories().forEach(c=>{ if(!categoryTypes[c]) categoryTypes[c]=DEFAULT_CATEGORY_TYPES[c]||'expense'; });
     saveCategoryTypes();
+    await loadFreshGrowthGoalsFromSupabase();
+    await loadWorkMeetings();
   } catch(e){ console.error('Boot error:', e); }
 
   showAppScreen();
@@ -192,17 +194,18 @@ async function loadAppData(){
   renderGoals(); renderWorkouts(); buildCalendar(); updateFitGoalDisplay();
   renderCatSelect(); renderTotalCover(); switchFinTab('yearly');
   renderBooks(); updateReadCalBookSelect(); buildReadCal(); renderReadReports();
-  renderPiano(); renderGrowthTrackers(); updateOverview(); renderReports();
+  renderPiano(); renderGrowthTrackers(); renderWorkTab(); updateOverview(); renderReports();
 }
 
 // ─── TABS ───
 function switchTab(name){
-  const tabs=['overview','goals','fitness','finance','growth'];
+  const tabs=['overview','goals','fitness','finance','growth','work'];
   document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',tabs[i]===name));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('panel-'+name).classList.add('active');
   if(name==='overview'){ updateOverview(); renderReports(); }
   if(name==='finance'){ renderTotalCover(); switchFinTab(finTab); }
+  if(name==='work'){ renderWorkTab(); }
 }
 
 // ─── GOALS ───
@@ -2922,7 +2925,7 @@ setTimeout(() => {
 // ─── REBUILT GROWTH HABITS MODULE ───
 // Fresh Growth area: user-created habits, monthly heatmaps, end-of-month review, continue/complete loop.
 const GROWTH_GOALS_KEY_V2 = 'myos_growth_goals_v2';
-let growthGoals = loadFreshGrowthGoals();
+let growthGoals = [];
 let growthSelectedGoalId = growthGoals.find(g => g.status === 'active')?.id || growthGoals[0]?.id || '';
 let growthOpenGoalId = growthSelectedGoalId || '';
 const freshGrowthCalView = { year: todayObj.getFullYear(), month: todayObj.getMonth() };
@@ -2941,13 +2944,36 @@ function normaliseGrowthGoal(g){
     monthDecisions: g.monthDecisions || {}
   };
 }
-function loadFreshGrowthGoals(){
+function loadFreshGrowthGoalsLocal(){
   try {
     const parsed = JSON.parse(localStorage.getItem(GROWTH_GOALS_KEY_V2) || '[]');
     return Array.isArray(parsed) ? parsed.map(normaliseGrowthGoal) : [];
   } catch(e){ return []; }
 }
-function saveFreshGrowthGoals(){ localStorage.setItem(GROWTH_GOALS_KEY_V2, JSON.stringify(growthGoals)); }
+async function loadFreshGrowthGoalsFromSupabase(){
+  try{
+    const {data,error} = await sb.from('growth_goals').select('id,goal,updated_at').order('updated_at',{ascending:false});
+    if(error){ console.warn('Growth Supabase load fallback:', error.message); growthGoals = loadFreshGrowthGoalsLocal(); return; }
+    if(data && data.length){
+      growthGoals = data.map(r=>normaliseGrowthGoal({...r.goal, id:r.id}));
+      localStorage.setItem(GROWTH_GOALS_KEY_V2, JSON.stringify(growthGoals));
+    } else {
+      growthGoals = loadFreshGrowthGoalsLocal();
+      if(growthGoals.length) syncFreshGrowthGoalsToSupabase();
+    }
+    growthSelectedGoalId = growthGoals.find(g => g.status === 'active')?.id || growthGoals[0]?.id || '';
+    growthOpenGoalId = growthSelectedGoalId || '';
+  }catch(e){ console.warn('Growth load failed:', e); growthGoals = loadFreshGrowthGoalsLocal(); }
+}
+function syncFreshGrowthGoalsToSupabase(){
+  if(!currentUser || !Array.isArray(growthGoals)) return;
+  const rows = growthGoals.map(g=>({ id:String(g.id), user_id:currentUser.id, goal:normaliseGrowthGoal(g), updated_at:new Date().toISOString() }));
+  if(rows.length) sb.from('growth_goals').upsert(rows,{onConflict:'id'}).then(({error})=>{ if(error) console.warn('Growth sync failed:',error.message); });
+}
+function saveFreshGrowthGoals(){
+  localStorage.setItem(GROWTH_GOALS_KEY_V2, JSON.stringify(growthGoals));
+  syncFreshGrowthGoalsToSupabase();
+}
 function activeGrowthGoals(){ return growthGoals.filter(g => g.status !== 'complete'); }
 function completedGrowthGoals(){ return growthGoals.filter(g => g.status === 'complete'); }
 function freshMonthKey(y = freshGrowthCalView.year, m = freshGrowthCalView.month){ return monthKey(y, m); }
@@ -3069,6 +3095,7 @@ function deleteGrowthGoal(id){
   growthGoals = growthGoals.filter(g => g.id !== id);
   if(growthSelectedGoalId === id) growthSelectedGoalId = activeGrowthGoals()[0]?.id || growthGoals[0]?.id || '';
   if(growthOpenGoalId === id) growthOpenGoalId = growthSelectedGoalId;
+  if(currentUser) sb.from('growth_goals').delete().eq('id', String(id));
   saveFreshGrowthGoals(); renderGrowthTrackers(); updateOverview(); showSaved();
 }
 function markGrowthComplete(id){
@@ -3297,3 +3324,160 @@ boot = async function(){
   updateOverview();
 };
 boot();
+
+
+// ─── WORK TAB: MEETING LOG ───
+let workViewYear = todayObj.getFullYear();
+let workViewMonth = todayObj.getMonth();
+let workSelectedDate = dayKey(todayObj.getFullYear(), todayObj.getMonth(), todayObj.getDate());
+let workEditingMeetingId = '';
+
+function workDateKeyFromInput(v){ return v || workSelectedDate || dayKey(todayObj.getFullYear(), todayObj.getMonth(), todayObj.getDate()); }
+function workMeetingDateKey(m){ return m.meeting_date || m.date || ''; }
+function workMeetingTitle(m){ return escapeHtml(m.title || 'Untitled meeting'); }
+function workMeetingProject(m){ return escapeHtml(m.project || m.topic || ''); }
+function workMeetingPeople(m){ return escapeHtml(m.people || ''); }
+function normaliseWorkMeeting(m){
+  return {
+    id: String(m.id || Date.now()),
+    title: m.title || 'Untitled meeting',
+    meeting_date: m.meeting_date || m.date || workSelectedDate,
+    project: m.project || '',
+    people: m.people || '',
+    meeting_type: m.meeting_type || m.type || 'Meeting',
+    note_html: m.note_html || '',
+    textboxes: Array.isArray(m.textboxes) ? m.textboxes : [],
+    followups: Array.isArray(m.followups) ? m.followups : [],
+    created_at: m.created_at || new Date().toISOString(),
+    updated_at: m.updated_at || new Date().toISOString()
+  };
+}
+
+async function loadWorkMeetings(){
+  try{
+    const {data,error}=await sb.from('work_meetings').select('*').order('meeting_date',{ascending:false});
+    if(error){ console.warn('Work meetings load failed:', error.message); state.workMeetings=[]; return; }
+    state.workMeetings=(data||[]).map(normaliseWorkMeeting);
+  }catch(e){ console.warn('Work meetings load failed:', e); state.workMeetings=[]; }
+}
+
+function renderWorkTab(){
+  if(!document.getElementById('panel-work')) return;
+  renderWorkSummary(); renderWorkCalendar(); renderWorkSelectedDay(); renderWorkWeeklyReview(false);
+}
+function renderWorkSummary(){
+  const mk=monthKey(workViewYear, workViewMonth);
+  const meetings=(state.workMeetings||[]).filter(m=>workMeetingDateKey(m).startsWith(mk));
+  const followups=meetings.flatMap(m=>(m.followups||[])).filter(f=>['Open','Waiting'].includes(f.status||'Open'));
+  const wc=document.getElementById('work-meeting-count'); if(wc) wc.textContent=meetings.length;
+  const fc=document.getElementById('work-followup-count'); if(fc) fc.textContent=followups.length;
+  const nc=document.getElementById('work-note-count'); if(nc) nc.textContent=meetings.filter(m=>stripHtml(m.note_html||'').trim() || (m.textboxes||[]).length).length;
+}
+function stripHtml(html){ const div=document.createElement('div'); div.innerHTML=html||''; return div.textContent||div.innerText||''; }
+function workPrevMonth(){ workViewMonth--; if(workViewMonth<0){workViewMonth=11;workViewYear--;} renderWorkTab(); }
+function workNextMonth(){ workViewMonth++; if(workViewMonth>11){workViewMonth=0;workViewYear++;} renderWorkTab(); }
+function renderWorkCalendar(){
+  const el=document.getElementById('work-calendar'); if(!el) return;
+  const label=document.getElementById('work-month-label'); if(label) label.textContent=`${MONTH_NAMES[workViewMonth]} ${workViewYear}`;
+  const first=new Date(workViewYear,workViewMonth,1); const days=new Date(workViewYear,workViewMonth+1,0).getDate();
+  const start=(first.getDay()+6)%7;
+  const labels=['Mo','Tu','We','Th','Fr','Sa','Su'].map(d=>`<div class="work-cal-label">${d}</div>`).join('');
+  let html=labels;
+  for(let i=0;i<start;i++) html+='<div class="work-day empty"></div>';
+  for(let d=1;d<=days;d++){
+    const key=dayKey(workViewYear,workViewMonth,d);
+    const meetings=(state.workMeetings||[]).filter(m=>workMeetingDateKey(m)===key);
+    const pills=meetings.slice(0,2).map(m=>`<span class="work-event-pill">${workMeetingTitle(m)}</span>`).join('')+(meetings.length>2?`<span class="work-event-pill more">+${meetings.length-2} more</span>`:'');
+    html+=`<div class="work-day ${key===workSelectedDate?'selected':''}" onclick="selectWorkDate('${key}')"><div class="work-day-num">${d}</div>${pills}</div>`;
+  }
+  el.innerHTML=html;
+}
+function selectWorkDate(key){ workSelectedDate=key; renderWorkCalendar(); renderWorkSelectedDay(); }
+function renderWorkSelectedDay(){
+  const title=document.getElementById('work-selected-title'); if(title) title.textContent=`Selected day — ${workSelectedDate}`;
+  const list=document.getElementById('work-day-meetings'); if(!list) return;
+  const meetings=(state.workMeetings||[]).filter(m=>workMeetingDateKey(m)===workSelectedDate).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
+  if(!meetings.length){ list.innerHTML=`<div class="card-sub">No meetings logged for this date.</div><button class="btn btn-ghost btn-small" onclick="openAddWorkMeetingModal('${workSelectedDate}')">+ Log meeting for this day</button>`; return; }
+  list.innerHTML=meetings.map(m=>{
+    const open=(m.followups||[]).filter(f=>['Open','Waiting'].includes(f.status||'Open')).length;
+    return `<div class="work-meeting-item"><div class="work-meeting-head"><div><div class="work-meeting-title">${workMeetingTitle(m)}</div><div class="work-meeting-meta">${workMeetingProject(m)}${workMeetingPeople(m)?' · '+workMeetingPeople(m):''}</div></div><span class="work-note-type">${escapeHtml(m.meeting_type||'Meeting')}</span></div><div class="card-sub">${open?`${open} open follow-up${open===1?'':'s'}`:'No open follow-ups'}</div><div class="work-meeting-actions"><button class="btn btn-ghost btn-small" onclick="openWorkMeeting('${m.id}')">Open</button><button class="btn btn-ghost btn-small" onclick="deleteWorkMeeting('${m.id}')">Delete</button></div></div>`;
+  }).join('');
+}
+function renderWorkWeeklyReview(expanded=false){
+  const el=document.getElementById('work-weekly-review'); if(!el) return;
+  const now=new Date();
+  const day=(now.getDay()+6)%7; const monday=new Date(now); monday.setDate(now.getDate()-day); monday.setHours(0,0,0,0);
+  const sunday=new Date(monday); sunday.setDate(monday.getDate()+6);
+  const inWeek=(m)=>{ const dt=new Date(workMeetingDateKey(m)+'T00:00:00'); return dt>=monday && dt<=sunday; };
+  const meetings=(state.workMeetings||[]).filter(inWeek);
+  const followups=meetings.flatMap(m=>(m.followups||[]).filter(f=>['Open','Waiting'].includes(f.status||'Open')).map(f=>({...f, meeting:m.title})));
+  el.innerHTML=`<div class="review-box"><h4>Meetings logged</h4><p>${meetings.length} meeting${meetings.length===1?'':'s'} captured this week.</p></div><div class="review-box"><h4>Open follow-ups</h4><p>${followups.length} follow-up${followups.length===1?'':'s'} still need action or decision.</p></div><div class="review-box"><h4>Next week focus</h4><p>${expanded&&followups.length?followups.slice(0,3).map(f=>escapeHtml(f.text||'Follow-up')).join('<br>'):'Summarise key carry-forward items before Monday.'}</p></div>`;
+}
+function openAddWorkMeetingModal(dateKey=''){
+  workEditingMeetingId='';
+  document.getElementById('work-modal-title').textContent='Add meeting';
+  document.getElementById('workMeetingId').value='';
+  document.getElementById('workMeetingTitle').value='';
+  document.getElementById('workMeetingDate').value=workDateKeyFromInput(dateKey);
+  document.getElementById('workMeetingProject').value='';
+  document.getElementById('workMeetingPeople').value='';
+  document.getElementById('workMeetingType').value='Meeting';
+  document.getElementById('workNoteEditor').innerHTML='';
+  document.querySelectorAll('#workPaperArea .floating-textbox').forEach(b=>b.remove());
+  document.getElementById('workFollowRows').innerHTML='';
+  workAddFollowupRow('', 'Open');
+  document.getElementById('workMeetingModal').classList.add('open');
+  setTimeout(()=>document.getElementById('workMeetingTitle')?.focus(),50);
+}
+function openWorkMeeting(id){
+  const m=(state.workMeetings||[]).find(x=>String(x.id)===String(id)); if(!m) return;
+  workEditingMeetingId=String(id);
+  document.getElementById('work-modal-title').textContent='Edit meeting';
+  document.getElementById('workMeetingId').value=m.id;
+  document.getElementById('workMeetingTitle').value=m.title||'';
+  document.getElementById('workMeetingDate').value=workMeetingDateKey(m);
+  document.getElementById('workMeetingProject').value=m.project||'';
+  document.getElementById('workMeetingPeople').value=m.people||'';
+  document.getElementById('workMeetingType').value=m.meeting_type||'Meeting';
+  document.getElementById('workNoteEditor').innerHTML=m.note_html||'';
+  const paper=document.getElementById('workPaperArea'); paper.querySelectorAll('.floating-textbox').forEach(b=>b.remove());
+  (m.textboxes||[]).forEach(tb=>workCreateTextbox(tb.html||'Text box', tb.left||40, tb.top||120));
+  document.getElementById('workFollowRows').innerHTML='';
+  (m.followups&&m.followups.length?m.followups:[{text:'',status:'Open'}]).forEach(f=>workAddFollowupRow(f.text||'', f.status||'Open'));
+  document.getElementById('workMeetingModal').classList.add('open');
+}
+function closeWorkMeetingModal(){ document.getElementById('workMeetingModal')?.classList.remove('open'); }
+function workAddFollowupRow(text='', status='Open'){
+  const wrap=document.getElementById('workFollowRows'); if(!wrap) return;
+  const row=document.createElement('div'); row.className='follow-row';
+  row.innerHTML=`<input class="input work-follow-text" value="${escapeAttr(text)}" placeholder="Follow-up item"><select class="input work-follow-status"><option ${status==='Open'?'selected':''}>Open</option><option ${status==='Waiting'?'selected':''}>Waiting</option><option ${status==='Done'?'selected':''}>Done</option><option ${status==='Dropped'?'selected':''}>Dropped</option></select><button class="btn btn-ghost btn-small" onclick="this.closest('.follow-row').remove()">Remove</button>`;
+  wrap.appendChild(row);
+}
+function escapeAttr(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function collectWorkFollowups(){ return [...document.querySelectorAll('#workFollowRows .follow-row')].map(r=>({text:r.querySelector('.work-follow-text')?.value.trim()||'', status:r.querySelector('.work-follow-status')?.value||'Open'})).filter(f=>f.text); }
+function collectWorkTextboxes(){ return [...document.querySelectorAll('#workPaperArea .floating-textbox')].map(b=>({left:parseFloat(b.style.left)||0, top:parseFloat(b.style.top)||0, html:b.querySelector('.textbox-content')?.innerHTML||b.innerHTML||''})); }
+async function saveWorkMeeting(){
+  const title=document.getElementById('workMeetingTitle').value.trim();
+  const date=document.getElementById('workMeetingDate').value;
+  if(!title||!date){ alert('Meeting title and date are required.'); return; }
+  const id=workEditingMeetingId || String(Date.now());
+  const row={id, user_id:currentUser?.id, title, meeting_date:date, project:document.getElementById('workMeetingProject').value.trim(), people:document.getElementById('workMeetingPeople').value.trim(), meeting_type:document.getElementById('workMeetingType').value, note_html:document.getElementById('workNoteEditor').innerHTML, textboxes:collectWorkTextboxes(), followups:collectWorkFollowups(), updated_at:new Date().toISOString()};
+  const {error}=await sb.from('work_meetings').upsert(row,{onConflict:'id'});
+  if(error){ console.error(error); alert('Could not save meeting: '+error.message); return; }
+  const existing=state.workMeetings.findIndex(m=>String(m.id)===String(id));
+  if(existing>=0) state.workMeetings[existing]=normaliseWorkMeeting(row); else state.workMeetings.unshift(normaliseWorkMeeting({...row, created_at:new Date().toISOString()}));
+  workSelectedDate=date; closeWorkMeetingModal(); renderWorkTab(); showSaved();
+}
+async function deleteWorkMeeting(id){
+  if(!confirm('Delete this meeting?')) return;
+  const {error}=await sb.from('work_meetings').delete().eq('id',String(id));
+  if(error){ console.error(error); alert('Could not delete meeting: '+error.message); return; }
+  state.workMeetings=state.workMeetings.filter(m=>String(m.id)!==String(id)); renderWorkTab(); showSaved();
+}
+function workGetNoteSelectionRange(){ const editor=document.getElementById('workNoteEditor'); const sel=window.getSelection(); if(!sel||sel.rangeCount===0||sel.toString().trim()==='') return null; const range=sel.getRangeAt(0); if(!editor||!editor.contains(range.commonAncestorContainer)) return null; return range; }
+function workHighlightSelection(){ const range=workGetNoteSelectionRange(); if(!range){ alert('Select text inside the meeting note first, then tap Highlight.'); return; } const mark=document.createElement('mark'); mark.className='note-highlight'; try{ const selected=range.extractContents(); mark.appendChild(selected); range.insertNode(mark); window.getSelection().removeAllRanges(); }catch(e){ console.warn(e); } }
+function workRemoveHighlight(){ const editor=document.getElementById('workNoteEditor'); const sel=window.getSelection(); if(sel&&sel.rangeCount>0&&sel.toString().trim()!==''){ const range=sel.getRangeAt(0); [...editor.querySelectorAll('.note-highlight')].forEach(mark=>{ if(range.intersectsNode(mark)) workUnwrapHighlight(mark); }); sel.removeAllRanges(); return; } alert('Select highlighted text first, then tap Remove highlight.'); }
+function workUnwrapHighlight(mark){ const p=mark.parentNode; while(mark.firstChild) p.insertBefore(mark.firstChild,mark); p.removeChild(mark); p.normalize(); }
+function workAddTextbox(){ workCreateTextbox('New movable note', 40 + Math.random()*80, 120 + Math.random()*70); }
+function workCreateTextbox(html,left,top){ const paper=document.getElementById('workPaperArea'); const box=document.createElement('div'); box.className='floating-textbox'; box.contentEditable='true'; box.style.left=left+'px'; box.style.top=top+'px'; box.innerHTML=`<div class="drag-handle" contenteditable="false">move</div><div class="textbox-content">${html}</div>`; paper.appendChild(box); workMakeDraggable(box); return box; }
+function workMakeDraggable(box){ const handle=box.querySelector('.drag-handle'); let startX,startY,startLeft,startTop,dragging=false; handle.addEventListener('pointerdown',e=>{ e.preventDefault(); e.stopPropagation(); dragging=true; handle.setPointerCapture?.(e.pointerId); startX=e.clientX; startY=e.clientY; startLeft=parseFloat(box.style.left)||0; startTop=parseFloat(box.style.top)||0; }); handle.addEventListener('pointermove',e=>{ if(!dragging) return; const parent=box.parentElement.getBoundingClientRect(); let left=startLeft+(e.clientX-startX); let top=startTop+(e.clientY-startY); left=Math.max(0,Math.min(left,parent.width-box.offsetWidth)); top=Math.max(26,Math.min(top,parent.height-box.offsetHeight)); box.style.left=left+'px'; box.style.top=top+'px'; }); handle.addEventListener('pointerup',e=>{ dragging=false; handle.releasePointerCapture?.(e.pointerId); }); handle.addEventListener('pointercancel',()=>dragging=false); }
