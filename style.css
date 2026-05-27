@@ -383,3 +383,62 @@ select:focus{border-color:var(--blue);}
 .user-pill{background:var(--blue-bg);color:var(--blue);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .logout-btn{background:var(--surface2);border:1px solid var(--border);border-radius:99px;padding:5px 10px;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;cursor:pointer;}
 .logout-btn:hover{color:var(--text);border-color:var(--blue);}
+
+
+/* ─── WORK TAB ─── */
+.work-topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px}
+.work-topbar h2{font-size:22px;font-weight:700;line-height:1.2;margin-bottom:6px}
+.work-topbar p{font-size:13px;color:var(--muted);line-height:1.5;max-width:660px}
+.work-summary-grid{margin-bottom:16px}
+.work-main-grid{align-items:start}
+.work-cal-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px}
+.work-calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.work-cal-label{text-align:center;font-size:10px;color:var(--muted);font-weight:700;padding-bottom:2px}
+.work-day{min-height:82px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:6px;overflow:hidden;cursor:pointer;transition:.15s}
+.work-day:hover{border-color:var(--blue);background:#f6f9fd}
+.work-day.empty{background:transparent;border:none;cursor:default}
+.work-day.selected{outline:2px solid var(--blue);outline-offset:1px}
+.work-day-num{font-family:'Space Grotesk',sans-serif;font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px}
+.work-event-pill{display:block;font-size:9px;padding:2px 4px;border-radius:4px;background:#e8f0fb;color:var(--blue);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.work-event-pill.more{background:#fdf0e6;color:var(--orange)}
+.side-list{display:flex;flex-direction:column;gap:10px}
+.work-meeting-item{border:1px solid var(--border);background:var(--surface2);border-radius:12px;padding:12px}
+.work-meeting-head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px}
+.work-meeting-title{font-weight:700}
+.work-meeting-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.work-note-type{font-size:10px;font-weight:700;padding:3px 7px;border-radius:99px;background:#e8f0fb;color:var(--blue);white-space:nowrap}
+.work-meeting-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.weekly-review{background:linear-gradient(135deg,#e8f0fb,#f8fbff);border:1px solid #c7d7ee}
+.review-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.review-box{background:rgba(255,255,255,.75);border:1px solid var(--border);border-radius:12px;padding:12px}
+.review-box h4{font-size:12px;margin-bottom:6px}
+.review-box p{font-size:12px;color:var(--muted);line-height:1.4}
+.work-modal-overlay{position:fixed;inset:0;background:rgba(10,20,35,.45);z-index:100;display:none;align-items:center;justify-content:center;padding:22px}
+.work-modal-overlay.open{display:flex}
+.work-meeting-modal{width:100%;max-width:980px;max-height:92vh;overflow:auto;background:var(--surface);border-radius:20px;box-shadow:0 24px 70px rgba(0,0,0,.28);padding:24px}
+.modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:18px}
+.modal-head h3{font-size:21px;font-weight:800;margin-bottom:4px}
+.modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-row{margin-bottom:12px}
+.form-label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:700;margin-bottom:6px}
+.input,.textarea,select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-family:'DM Sans',sans-serif;color:var(--text);outline:none}
+.meeting-note-workspace{border:1px solid var(--border);border-radius:14px;background:var(--surface);overflow:hidden}
+.note-workspace-head{padding:10px 12px;border-bottom:1px solid var(--border);background:#f6f9fd;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.note-workspace-title{font-weight:700;font-size:13px}
+.note-tools{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.page-pill{font-size:12px;font-weight:700;color:var(--blue);background:#e8f0fb;border-radius:999px;padding:4px 10px}
+.tool-btn{background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer}
+.tool-btn.highlight{background:#fff8d6;border-color:#ead47a;color:#8a6d00}
+.paper-area{position:relative;background-color:#fbfcff;background-image:radial-gradient(#cfd9e6 1px,transparent 1px);background-size:18px 18px;min-height:310px;overflow:hidden}
+.note-editor{position:relative;z-index:1;min-height:310px;padding:22px 24px;font-size:15px;line-height:1.7;outline:none;white-space:pre-wrap}
+.note-editor:empty:before{content:attr(data-placeholder);color:#9badbf}
+.note-highlight{background:rgba(255,230,128,.75);border-radius:4px;padding:0 2px}
+.floating-textbox{position:absolute;z-index:5;min-width:150px;min-height:52px;padding:10px 12px;background:#fffef5;border:1.5px solid #e7c96a;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);font-size:13px;line-height:1.4;outline:none;cursor:text}
+.floating-textbox .drag-handle{position:absolute;top:-22px;left:0;background:#1e2a3a;color:#fff;border-radius:8px 8px 0 0;font-size:10px;padding:4px 8px;cursor:move;user-select:none}
+.textbox-content{min-width:120px;min-height:32px;outline:none}
+.scribble-hint{font-size:12px;color:var(--muted);padding:9px 12px;border-top:1px solid var(--border);background:#fbfcff}
+.follow-section{margin-top:14px}
+.follow-row{display:grid;grid-template-columns:1fr 130px 90px;gap:8px;margin-bottom:8px}
+.modal-actions{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:18px}
+.save-note{font-size:12px;color:var(--muted)}
+@media(max-width:860px){.work-main-grid,.review-grid,.modal-grid,.follow-row{grid-template-columns:1fr}.work-topbar{flex-direction:column}.work-day{min-height:58px}.work-event-pill{display:none}.work-meeting-modal{padding:18px}.work-modal-overlay{padding:12px}}
