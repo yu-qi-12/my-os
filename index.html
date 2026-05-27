@@ -62,6 +62,7 @@
   <button class="tab" onclick="switchTab('fitness')">Fitness</button>
   <button class="tab" onclick="switchTab('finance')">Finance</button>
   <button class="tab" onclick="switchTab('growth')">Growth</button>
+  <button class="tab" onclick="switchTab('work')">Work</button>
 </div>
 
 <!-- OVERVIEW -->
@@ -466,6 +467,76 @@
       <div style="margin-top:14px;text-align:right;">
         <button class="growth-btn growth-btn-ghost growth-btn-sm" onclick="closeGrowthReport()">Close</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- WORK -->
+<div class="panel" id="panel-work">
+  <div class="work-topbar">
+    <div>
+      <div class="card-label" style="margin-bottom:6px">Work</div>
+      <h2>Monthly meeting log</h2>
+      <p>Capture meetings by date, use Scribble/Text notes, highlight key points, add movable text boxes, and review follow-ups weekly.</p>
+    </div>
+    <button class="btn btn-primary" onclick="openAddWorkMeetingModal()">+ Log meeting</button>
+  </div>
+
+  <div class="grid-3 work-summary-grid">
+    <div class="card"><div class="card-label">Meetings this month</div><div class="card-value" id="work-meeting-count" style="color:var(--blue)">0</div><div class="card-sub">logged this month</div></div>
+    <div class="card"><div class="card-label">Open follow-ups</div><div class="card-value" id="work-followup-count" style="color:var(--orange)">0</div><div class="card-sub">need review</div></div>
+    <div class="card"><div class="card-label">Notes captured</div><div class="card-value" id="work-note-count" style="color:var(--purple)">0</div><div class="card-sub">meeting notes saved</div></div>
+  </div>
+
+  <div class="grid-2 work-main-grid">
+    <div class="card">
+      <div class="work-cal-head">
+        <button class="btn btn-ghost btn-small" onclick="workPrevMonth()">‹</button>
+        <div class="card-label" id="work-month-label" style="margin-bottom:0">Month</div>
+        <button class="btn btn-ghost btn-small" onclick="workNextMonth()">›</button>
+      </div>
+      <div class="work-calendar" id="work-calendar"></div>
+    </div>
+    <div class="card">
+      <div class="card-label" id="work-selected-title">Selected day</div>
+      <div class="side-list" id="work-day-meetings"></div>
+    </div>
+  </div>
+
+  <div class="card weekly-review work-weekly-card">
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+      <div><div class="card-label" style="margin-bottom:6px">Weekly reflection</div><h3 style="font-size:18px;margin-bottom:4px">This week</h3><p class="card-sub">Review meetings and carry the right things into next week.</p></div>
+      <button class="btn btn-primary" onclick="renderWorkWeeklyReview(true)">Start review</button>
+    </div>
+    <div class="review-grid" id="work-weekly-review"></div>
+  </div>
+
+  <div class="work-modal-overlay" id="workMeetingModal">
+    <div class="work-meeting-modal">
+      <div class="modal-head">
+        <div><h3 id="work-modal-title">Add meeting</h3><div class="card-sub">Fast meeting capture: details, note, follow-ups, save.</div></div>
+        <button class="btn btn-ghost btn-small" onclick="closeWorkMeetingModal()">Close</button>
+      </div>
+      <input type="hidden" id="workMeetingId">
+      <div class="modal-grid">
+        <div class="form-row"><label class="form-label">Meeting title</label><input class="input" id="workMeetingTitle" placeholder="e.g. Marketing WIP"></div>
+        <div class="form-row"><label class="form-label">Date</label><input class="input" id="workMeetingDate" type="date"></div>
+        <div class="form-row"><label class="form-label">Project / topic</label><input class="input" id="workMeetingProject" placeholder="e.g. Delta Connect"></div>
+        <div class="form-row"><label class="form-label">People</label><input class="input" id="workMeetingPeople" placeholder="e.g. Melissa, agency"></div>
+      </div>
+      <div class="form-row"><label class="form-label">Meeting type</label><select class="input" id="workMeetingType"><option>Meeting</option><option>Brainstorm</option><option>Internal check-in</option><option>External call</option><option>Personal work note</option></select></div>
+      <div class="meeting-note-workspace">
+        <div class="note-workspace-head">
+          <div class="note-workspace-title">Meeting note</div>
+          <div class="note-tools"><span class="page-pill">Scribble / Text</span><button class="tool-btn highlight" onclick="workHighlightSelection()">Highlight</button><button class="tool-btn" onclick="workAddTextbox()">+ Text box</button><button class="tool-btn" onclick="workRemoveHighlight()">Remove highlight</button></div>
+        </div>
+        <div class="paper-area" id="workPaperArea">
+          <div id="workNoteEditor" class="note-editor" contenteditable="true" data-placeholder="Use keyboard or Apple Pencil Scribble here..."></div>
+        </div>
+        <div class="scribble-hint">Use Scribble/Text for the main note. Select text to highlight. Use + Text box for movable side notes during the conversation.</div>
+      </div>
+      <div class="follow-section"><div class="form-label">Follow-ups</div><div id="workFollowRows"></div><button class="btn btn-ghost btn-small" onclick="workAddFollowupRow()">+ Add follow-up</button></div>
+      <div class="modal-actions"><div class="save-note">Open follow-ups will appear in weekly reflection.</div><div style="display:flex;gap:8px"><button class="btn btn-ghost" onclick="closeWorkMeetingModal()">Cancel</button><button class="btn btn-primary" onclick="saveWorkMeeting()">Save meeting</button></div></div>
     </div>
   </div>
 </div>
