@@ -470,7 +470,9 @@ function guessType(description){
 }
 
 function parseCSV(text){
-  const lines = text.split(/\r?\n/).filter(l=>l.trim());
+  const lines = text.split(/
+?
+/).filter(l=>l.trim());
   if(lines.length < 2) return [];
   
   // Detect delimiter
@@ -653,7 +655,7 @@ function highlightSearchText(text, term){
   const safe = escapeHTML(text);
   const q = String(term||'').trim();
   if(!q) return safe;
-  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escaped = q.replace(/[.*+?^${}()|[\]\]/g, '\$&');
   try {
     return safe.replace(new RegExp(escaped, 'gi'), match => `<mark class="search-highlight">${match}</mark>`);
   } catch(e){ return safe; }
@@ -704,7 +706,9 @@ async function quickAddUploadCategory(rowId){
   const typeRaw=prompt('Category type: expense, income, or asset', 'expense');
   const type=['expense','income','asset'].includes(String(typeRaw||'').toLowerCase()) ? String(typeRaw).toLowerCase() : 'expense';
   const warning=categorySimilarityWarning(name);
-  if(warning && !confirm(warning.replace(/^⚠️\s*/, '')+'\n\nContinue adding this category?')) return;
+  if(warning && !confirm(warning.replace(/^⚠️\s*/, '')+'
+
+Continue adding this category?')) return;
   restoreCategory(name);
   if(!state.categories.includes(name)) state.categories.push(name);
   setCategoryType(name,type);
@@ -1946,8 +1950,8 @@ function getMerchantKey(description){
   return String(description||'')
     .toLowerCase()
     .replace(/paypal \*/g,'paypal ')
-    .replace(/\b(pos|eftpos|visa|mastercard|card|purchase|debit|credit|direct debit|payment)\b/g,' ')
-    .replace(/\b(au|aus|australia|sydney|melbourne|brisbane|nsw|vic|qld|pty|ltd)\b/g,' ')
+    .replace(/(pos|eftpos|visa|mastercard|card|purchase|debit|credit|direct debit|payment)/g,' ')
+    .replace(/(au|aus|australia|sydney|melbourne|brisbane|nsw|vic|qld|pty|ltd)/g,' ')
     .replace(/[0-9]+/g,' ')
     .replace(/[^a-z& ]/g,' ')
     .replace(/\s+/g,' ')
@@ -2131,7 +2135,9 @@ async function addCategory(){
   if(!name) return;
 
   const warning=categorySimilarityWarning(name);
-  if(warning && !confirm(warning.replace(/^⚠️\s*/, '')+'\n\nContinue adding this category?')) return;
+  if(warning && !confirm(warning.replace(/^⚠️\s*/, '')+'
+
+Continue adding this category?')) return;
 
   restoreCategory(name);
   if(!state.categories.includes(name)) state.categories.push(name);
@@ -3367,7 +3373,6 @@ boot = async function(){
   renderGrowthTrackers();
   updateOverview();
 };
-boot();
 
 
 // ─── WORK TAB: MEETING LOG ───
@@ -3553,3 +3558,5 @@ function workUnwrapHighlight(mark){ const p=mark.parentNode; while(mark.firstChi
 function workAddTextbox(){ workCreateTextbox('New movable note', 40 + Math.random()*80, 120 + Math.random()*70); }
 function workCreateTextbox(html,left,top){ const paper=document.getElementById('workPaperArea'); const box=document.createElement('div'); box.className='floating-textbox'; box.contentEditable='true'; box.style.left=left+'px'; box.style.top=top+'px'; box.innerHTML=`<div class="drag-handle" contenteditable="false">move</div><div class="textbox-content">${html}</div>`; paper.appendChild(box); workMakeDraggable(box); return box; }
 function workMakeDraggable(box){ const handle=box.querySelector('.drag-handle'); let startX,startY,startLeft,startTop,dragging=false; handle.addEventListener('pointerdown',e=>{ e.preventDefault(); e.stopPropagation(); dragging=true; handle.setPointerCapture?.(e.pointerId); startX=e.clientX; startY=e.clientY; startLeft=parseFloat(box.style.left)||0; startTop=parseFloat(box.style.top)||0; }); handle.addEventListener('pointermove',e=>{ if(!dragging) return; const parent=box.parentElement.getBoundingClientRect(); let left=startLeft+(e.clientX-startX); let top=startTop+(e.clientY-startY); left=Math.max(0,Math.min(left,parent.width-box.offsetWidth)); top=Math.max(26,Math.min(top,parent.height-box.offsetHeight)); box.style.left=left+'px'; box.style.top=top+'px'; }); handle.addEventListener('pointerup',e=>{ dragging=false; handle.releasePointerCapture?.(e.pointerId); }); handle.addEventListener('pointercancel',()=>dragging=false); }
+
+boot();
