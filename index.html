@@ -465,7 +465,7 @@
     <div class="growth-modal growth-report-modal">
       <div id="growthReportContent"></div>
       <div style="margin-top:14px;text-align:right;">
-        <button class="growth-btn growth-btn-ghost growth-btn-sm" onclick="closeGrowthReport()">Close</button>
+        <button class="growth-btn growth-btn-ghost growth-btn-sm" onclick="closeGrowthReport()">✕ Close</button>
       </div>
     </div>
   </div>
@@ -479,7 +479,7 @@
       <h2>Monthly meeting log</h2>
       <p>Capture meetings by date, use Scribble/Text notes, highlight key points, add movable text boxes, and review follow-ups weekly.</p>
     </div>
-    <button class="btn btn-primary" onclick="openAddWorkMeetingModal()">+ Log meeting</button>
+    <button class="btn btn-primary" onclick="openAddWorkMeetingModal()">＋ Log meeting</button>
   </div>
 
   <div class="grid-3 work-summary-grid">
@@ -506,7 +506,7 @@
   <div class="card weekly-review work-weekly-card">
     <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
       <div><div class="card-label" style="margin-bottom:6px">Weekly reflection</div><h3 style="font-size:18px;margin-bottom:4px">This week</h3><p class="card-sub">Review meetings and carry the right things into next week.</p></div>
-      <button class="btn btn-primary" onclick="renderWorkWeeklyReview(true)">Start review</button>
+      <button class="btn btn-primary" onclick="renderWorkWeeklyReview(true)">Start review →</button>
     </div>
     <div class="review-grid" id="work-weekly-review"></div>
   </div>
@@ -515,7 +515,7 @@
     <div class="work-meeting-modal">
       <div class="modal-head">
         <div><h3 id="work-modal-title">Add meeting</h3><div class="card-sub">Fast meeting capture: details, note, follow-ups, save.</div></div>
-        <button class="btn btn-ghost btn-small" onclick="closeWorkMeetingModal()">Close</button>
+        <button class="btn btn-ghost btn-small" onclick="closeWorkMeetingModal()">✕ Close</button>
       </div>
       <input type="hidden" id="workMeetingId">
       <div class="modal-grid">
@@ -536,7 +536,7 @@
         <div class="scribble-hint">Use Scribble/Text for the main note. Select text to highlight. Use + Text box for movable side notes during the conversation.</div>
       </div>
       <div class="follow-section"><div class="form-label">Follow-ups</div><div id="workFollowRows"></div><button class="btn btn-ghost btn-small" onclick="workAddFollowupRow()">+ Add follow-up</button></div>
-      <div class="modal-actions"><div class="save-note">Open follow-ups will appear in weekly reflection.</div><div style="display:flex;gap:8px"><button class="btn btn-ghost" onclick="closeWorkMeetingModal()">Cancel</button><button class="btn btn-primary" onclick="saveWorkMeeting()">Save meeting</button></div></div>
+      <div class="modal-actions"><div class="save-note">Open follow-ups will appear in weekly reflection.</div><div style="display:flex;gap:8px"><button class="btn btn-ghost" onclick="closeWorkMeetingModal()">Cancel</button><button class="btn btn-primary" onclick="saveWorkMeeting()">✓ Save meeting</button></div></div>
     </div>
   </div>
 </div>
