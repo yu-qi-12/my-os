@@ -396,6 +396,46 @@ select:focus{border-color:var(--blue);}
 .logout-btn:hover{color:var(--text);border-color:var(--blue);}
 
 
+
+/* ─── POLISHED SHARED BUTTONS ─── */
+.btn{
+  border:none;
+  border-radius:999px;
+  padding:9px 15px;
+  font-family:'DM Sans',sans-serif;
+  font-size:13px;
+  font-weight:700;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  line-height:1;
+  transition:transform .14s ease, box-shadow .14s ease, background .14s ease, border-color .14s ease, color .14s ease;
+  color:var(--text);
+  white-space:nowrap;
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+}
+.btn:hover{transform:translateY(-1px)}
+.btn:active{transform:translateY(0);box-shadow:none}
+.btn-primary{
+  background:linear-gradient(135deg,#3a7bd5,#5b8fe3);
+  color:#fff;
+  box-shadow:0 8px 18px rgba(58,123,213,.22);
+}
+.btn-primary:hover{box-shadow:0 10px 24px rgba(58,123,213,.28)}
+.btn-ghost{
+  background:rgba(255,255,255,.72);
+  border:1px solid var(--border);
+  color:var(--text);
+  box-shadow:0 2px 8px rgba(30,42,58,.04);
+}
+.btn-ghost:hover{background:#fff;border-color:#c8d4e3;box-shadow:0 6px 16px rgba(30,42,58,.08)}
+.btn-small{padding:7px 11px;font-size:12px;border-radius:999px}
+.btn-danger{color:var(--pink);border-color:#efc4d4;background:#fff7fa}
+.btn-danger:hover{border-color:var(--pink);color:var(--pink)}
+
 /* ─── WORK TAB ─── */
 .work-topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px}
 .work-topbar h2{font-size:22px;font-weight:700;line-height:1.2;margin-bottom:6px}
