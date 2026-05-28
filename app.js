@@ -3381,6 +3381,20 @@ function workMeetingDateKey(m){ return m.meeting_date || m.date || ''; }
 function workMeetingTitle(m){ return escapeHtml(m.title || 'Untitled meeting'); }
 function workMeetingProject(m){ return escapeHtml(m.project || m.topic || ''); }
 function workMeetingPeople(m){ return escapeHtml(m.people || ''); }
+function workActiveFollowupStatuses(){ return ['Open','Waiting','Carry next week']; }
+function workIsActiveFollowupStatus(status){ return workActiveFollowupStatuses().includes(status || 'Open'); }
+function syncWorkViewToDate(dateKey){
+  if(!dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return;
+  const [y,m]=dateKey.split('-').map(Number);
+  workViewYear=y; workViewMonth=m-1;
+}
+function workStatusClass(status){
+  const s=String(status||'Open').toLowerCase();
+  if(s.includes('wait')||s.includes('carry')) return 'waiting';
+  if(s.includes('done')) return 'done';
+  if(s.includes('drop')) return 'dropped';
+  return '';
+}
 function normaliseWorkMeeting(m){
   return {
     id: isUuidLike(m.id) ? String(m.id) : myosUuid(),
@@ -3412,7 +3426,7 @@ function renderWorkTab(){
 function renderWorkSummary(){
   const mk=monthKey(workViewYear, workViewMonth);
   const meetings=(state.workMeetings||[]).filter(m=>workMeetingDateKey(m).startsWith(mk));
-  const followups=meetings.flatMap(m=>(m.followups||[])).filter(f=>['Open','Waiting'].includes(f.status||'Open'));
+  const followups=meetings.flatMap(m=>(m.followups||[])).filter(f=>workIsActiveFollowupStatus(f.status));
   const wc=document.getElementById('work-meeting-count'); if(wc) wc.textContent=meetings.length;
   const fc=document.getElementById('work-followup-count'); if(fc) fc.textContent=followups.length;
   const nc=document.getElementById('work-note-count'); if(nc) nc.textContent=meetings.filter(m=>stripHtml(m.note_html||'').trim() || (m.textboxes||[]).length).length;
@@ -3443,7 +3457,7 @@ function renderWorkSelectedDay(){
   const meetings=(state.workMeetings||[]).filter(m=>workMeetingDateKey(m)===workSelectedDate).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
   if(!meetings.length){ list.innerHTML=`<div class="card-sub">No meetings logged for this date.</div><button class="btn btn-ghost btn-small" onclick="openAddWorkMeetingModal('${workSelectedDate}')">+ Log meeting for this day</button>`; return; }
   list.innerHTML=meetings.map(m=>{
-    const open=(m.followups||[]).filter(f=>['Open','Waiting'].includes(f.status||'Open')).length;
+    const open=(m.followups||[]).filter(f=>workIsActiveFollowupStatus(f.status)).length;
     return `<div class="work-meeting-item"><div class="work-meeting-head"><div><div class="work-meeting-title">${workMeetingTitle(m)}</div><div class="work-meeting-meta">${workMeetingProject(m)}${workMeetingPeople(m)?' · '+workMeetingPeople(m):''}</div></div><span class="work-note-type">${escapeHtml(m.meeting_type||'Meeting')}</span></div><div class="card-sub">${open?`${open} open follow-up${open===1?'':'s'}`:'No open follow-ups'}</div><div class="work-meeting-actions"><button class="btn btn-ghost btn-small" onclick="openWorkMeeting('${m.id}')">Open</button><button class="btn btn-ghost btn-small" onclick="deleteWorkMeeting('${m.id}')">Delete</button></div></div>`;
   }).join('');
 }
@@ -3454,8 +3468,37 @@ function renderWorkWeeklyReview(expanded=false){
   const sunday=new Date(monday); sunday.setDate(monday.getDate()+6);
   const inWeek=(m)=>{ const dt=new Date(workMeetingDateKey(m)+'T00:00:00'); return dt>=monday && dt<=sunday; };
   const meetings=(state.workMeetings||[]).filter(inWeek);
-  const followups=meetings.flatMap(m=>(m.followups||[]).filter(f=>['Open','Waiting'].includes(f.status||'Open')).map(f=>({...f, meeting:m.title})));
-  el.innerHTML=`<div class="review-box"><h4>Meetings logged</h4><p>${meetings.length} meeting${meetings.length===1?'':'s'} captured this week.</p></div><div class="review-box"><h4>Open follow-ups</h4><p>${followups.length} follow-up${followups.length===1?'':'s'} still need action or decision.</p></div><div class="review-box"><h4>Next week focus</h4><p>${expanded&&followups.length?followups.slice(0,3).map(f=>escapeHtml(f.text||'Follow-up')).join('<br>'):'Summarise key carry-forward items before Monday.'}</p></div>`;
+  const followups=meetings.flatMap(m=>(m.followups||[]).map((f,i)=>({...f, index:i, meetingId:m.id, meeting:m.title, meetingDate:workMeetingDateKey(m)}))).filter(f=>workIsActiveFollowupStatus(f.status));
+  const carried=followups.filter(f=>(f.status||'')==='Carry next week').length;
+  if(!expanded){
+    el.className='review-grid';
+    el.innerHTML=`<div class="review-box"><h4>Meetings logged</h4><p>${meetings.length} meeting${meetings.length===1?'':'s'} captured this week.</p></div><div class="review-box"><h4>Open follow-ups</h4><p>${followups.length} follow-up${followups.length===1?'':'s'} still need action or decision.</p></div><div class="review-box"><h4>Next week focus</h4><p>${carried?`${carried} item${carried===1?'':'s'} already marked to carry next week.`:'Start review to choose what carries forward.'}</p></div>`;
+    return;
+  }
+  el.className='review-grid';
+  const list=followups.length ? followups.map(f=>`
+    <div class="work-review-item">
+      <div>
+        <div style="font-weight:600;">${escapeHtml(f.text||'Follow-up')} <span class="work-status-pill ${workStatusClass(f.status)}">${escapeHtml(f.status||'Open')}</span></div>
+        <div class="work-review-meta">${escapeHtml(f.meeting||'Meeting')} · ${escapeHtml(f.meetingDate||'')}</div>
+      </div>
+      <div class="work-review-actions">
+        <button class="btn btn-ghost btn-small" onclick="workUpdateFollowupStatus('${f.meetingId}',${f.index},'Done')">Done</button>
+        <button class="btn btn-ghost btn-small" onclick="workUpdateFollowupStatus('${f.meetingId}',${f.index},'Waiting')">Waiting</button>
+        <button class="btn btn-ghost btn-small" onclick="workUpdateFollowupStatus('${f.meetingId}',${f.index},'Carry next week')">Carry</button>
+        <button class="btn btn-ghost btn-small" onclick="workUpdateFollowupStatus('${f.meetingId}',${f.index},'Dropped')">Drop</button>
+      </div>
+    </div>`).join('') : '<div class="card-sub">No open follow-ups this week. Nice clean loop.</div>';
+  el.innerHTML=`
+    <div class="review-box"><h4>Meetings logged</h4><p>${meetings.length} meeting${meetings.length===1?'':'s'} captured this week.</p></div>
+    <div class="review-box"><h4>Open follow-ups</h4><p>${followups.length} follow-up${followups.length===1?'':'s'} still need action or decision.</p></div>
+    <div class="review-box"><h4>Next week focus</h4><p>${carried?`${carried} item${carried===1?'':'s'} marked to carry forward.`:'Use Carry to move items into next week.'}</p></div>
+    <div class="work-review-expanded">
+      <div style="font-weight:700;margin-bottom:4px;">Follow-up review</div>
+      <div class="card-sub">Mark each item as Done, Waiting, Carry, or Drop. This updates the meeting record in Supabase.</div>
+      <div class="work-review-list">${list}</div>
+      <textarea class="work-review-note" placeholder="Optional quick reflection: what should I focus on next week?"></textarea>
+    </div>`;
 }
 function openAddWorkMeetingModal(dateKey=''){
   workEditingMeetingId='';
@@ -3485,7 +3528,7 @@ function openWorkMeeting(id){
   document.getElementById('workMeetingType').value=m.meeting_type||'Meeting';
   document.getElementById('workNoteEditor').innerHTML=m.note_html||'';
   const paper=document.getElementById('workPaperArea'); paper.querySelectorAll('.floating-textbox').forEach(b=>b.remove());
-  (m.textboxes||[]).forEach(tb=>workCreateTextbox(tb.html||'Text box', tb.left||40, tb.top||120));
+  (m.textboxes||[]).forEach(tb=>workCreateTextbox(tb.html||'Text box', tb.left||40, tb.top||120, tb.width||180, tb.height||80));
   document.getElementById('workFollowRows').innerHTML='';
   (m.followups&&m.followups.length?m.followups:[{text:'',status:'Open'}]).forEach(f=>workAddFollowupRow(f.text||'', f.status||'Open'));
   document.getElementById('workMeetingModal').classList.add('open');
@@ -3494,12 +3537,12 @@ function closeWorkMeetingModal(){ document.getElementById('workMeetingModal')?.c
 function workAddFollowupRow(text='', status='Open'){
   const wrap=document.getElementById('workFollowRows'); if(!wrap) return;
   const row=document.createElement('div'); row.className='follow-row';
-  row.innerHTML=`<input class="input work-follow-text" value="${escapeAttr(text)}" placeholder="Follow-up item"><select class="input work-follow-status"><option ${status==='Open'?'selected':''}>Open</option><option ${status==='Waiting'?'selected':''}>Waiting</option><option ${status==='Done'?'selected':''}>Done</option><option ${status==='Dropped'?'selected':''}>Dropped</option></select><button class="btn btn-ghost btn-small" onclick="this.closest('.follow-row').remove()">Remove</button>`;
+  row.innerHTML=`<input class="input work-follow-text" value="${escapeAttr(text)}" placeholder="Follow-up item"><select class="input work-follow-status"><option ${status==='Open'?'selected':''}>Open</option><option ${status==='Waiting'?'selected':''}>Waiting</option><option ${status==='Carry next week'?'selected':''}>Carry next week</option><option ${status==='Done'?'selected':''}>Done</option><option ${status==='Dropped'?'selected':''}>Dropped</option></select><button class="btn btn-ghost btn-small" onclick="this.closest('.follow-row').remove()">Remove</button>`;
   wrap.appendChild(row);
 }
 function escapeAttr(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 function collectWorkFollowups(){ return [...document.querySelectorAll('#workFollowRows .follow-row')].map(r=>({text:r.querySelector('.work-follow-text')?.value.trim()||'', status:r.querySelector('.work-follow-status')?.value||'Open'})).filter(f=>f.text); }
-function collectWorkTextboxes(){ return [...document.querySelectorAll('#workPaperArea .floating-textbox')].map(b=>({left:parseFloat(b.style.left)||0, top:parseFloat(b.style.top)||0, html:b.querySelector('.textbox-content')?.innerHTML||b.innerHTML||''})); }
+function collectWorkTextboxes(){ return [...document.querySelectorAll('#workPaperArea .floating-textbox')].map(b=>({left:parseFloat(b.style.left)||0, top:parseFloat(b.style.top)||0, width:parseFloat(b.style.width)||b.offsetWidth||180, height:parseFloat(b.style.height)||b.offsetHeight||80, html:b.querySelector('.textbox-content')?.innerHTML||b.innerHTML||''})); }
 async function saveWorkMeeting(){
   const title=document.getElementById('workMeetingTitle').value.trim();
   const date=document.getElementById('workMeetingDate').value;
@@ -3538,7 +3581,7 @@ async function saveWorkMeeting(){
   const saved=normaliseWorkMeeting(data || payload);
   const existing=state.workMeetings.findIndex(m=>String(m.id)===String(saved.id));
   if(existing>=0) state.workMeetings[existing]=saved; else state.workMeetings.unshift(saved);
-  workSelectedDate=date; workEditingMeetingId=''; closeWorkMeetingModal(); renderWorkTab(); showSaved();
+  workSelectedDate=date; syncWorkViewToDate(date); workEditingMeetingId=''; closeWorkMeetingModal(); renderWorkTab(); showSaved();
 }
 async function deleteWorkMeeting(id){
   if(!confirm('Delete this meeting?')) return;
@@ -3550,6 +3593,65 @@ function workGetNoteSelectionRange(){ const editor=document.getElementById('work
 function workHighlightSelection(){ const range=workGetNoteSelectionRange(); if(!range){ alert('Select text inside the meeting note first, then tap Highlight.'); return; } const mark=document.createElement('mark'); mark.className='note-highlight'; try{ const selected=range.extractContents(); mark.appendChild(selected); range.insertNode(mark); window.getSelection().removeAllRanges(); }catch(e){ console.warn(e); } }
 function workRemoveHighlight(){ const editor=document.getElementById('workNoteEditor'); const sel=window.getSelection(); if(sel&&sel.rangeCount>0&&sel.toString().trim()!==''){ const range=sel.getRangeAt(0); [...editor.querySelectorAll('.note-highlight')].forEach(mark=>{ if(range.intersectsNode(mark)) workUnwrapHighlight(mark); }); sel.removeAllRanges(); return; } alert('Select highlighted text first, then tap Remove highlight.'); }
 function workUnwrapHighlight(mark){ const p=mark.parentNode; while(mark.firstChild) p.insertBefore(mark.firstChild,mark); p.removeChild(mark); p.normalize(); }
-function workAddTextbox(){ workCreateTextbox('New movable note', 40 + Math.random()*80, 120 + Math.random()*70); }
-function workCreateTextbox(html,left,top){ const paper=document.getElementById('workPaperArea'); const box=document.createElement('div'); box.className='floating-textbox'; box.contentEditable='true'; box.style.left=left+'px'; box.style.top=top+'px'; box.innerHTML=`<div class="drag-handle" contenteditable="false">move</div><div class="textbox-content">${html}</div>`; paper.appendChild(box); workMakeDraggable(box); return box; }
-function workMakeDraggable(box){ const handle=box.querySelector('.drag-handle'); let startX,startY,startLeft,startTop,dragging=false; handle.addEventListener('pointerdown',e=>{ e.preventDefault(); e.stopPropagation(); dragging=true; handle.setPointerCapture?.(e.pointerId); startX=e.clientX; startY=e.clientY; startLeft=parseFloat(box.style.left)||0; startTop=parseFloat(box.style.top)||0; }); handle.addEventListener('pointermove',e=>{ if(!dragging) return; const parent=box.parentElement.getBoundingClientRect(); let left=startLeft+(e.clientX-startX); let top=startTop+(e.clientY-startY); left=Math.max(0,Math.min(left,parent.width-box.offsetWidth)); top=Math.max(26,Math.min(top,parent.height-box.offsetHeight)); box.style.left=left+'px'; box.style.top=top+'px'; }); handle.addEventListener('pointerup',e=>{ dragging=false; handle.releasePointerCapture?.(e.pointerId); }); handle.addEventListener('pointercancel',()=>dragging=false); }
+function workAddTextbox(){ workCreateTextbox('New movable note', 40 + Math.random()*80, 120 + Math.random()*70, 180, 80); }
+function workCreateTextbox(html,left,top,width=180,height=80){
+  const paper=document.getElementById('workPaperArea');
+  const box=document.createElement('div');
+  box.className='floating-textbox';
+  box.style.left=left+'px';
+  box.style.top=top+'px';
+  box.style.width=width+'px';
+  box.style.height=height+'px';
+  box.innerHTML=`<div class="drag-handle" contenteditable="false">move</div><div class="textbox-content" contenteditable="true">${html}</div><div class="resize-handle" contenteditable="false" title="Resize"></div>`;
+  paper.appendChild(box);
+  workMakeDraggable(box);
+  workMakeResizable(box);
+  return box;
+}
+function workMakeDraggable(box){
+  const handle=box.querySelector('.drag-handle');
+  let startX,startY,startLeft,startTop,dragging=false;
+  handle.addEventListener('pointerdown',e=>{
+    e.preventDefault(); e.stopPropagation(); dragging=true;
+    handle.setPointerCapture?.(e.pointerId);
+    startX=e.clientX; startY=e.clientY; startLeft=parseFloat(box.style.left)||0; startTop=parseFloat(box.style.top)||0;
+  });
+  handle.addEventListener('pointermove',e=>{
+    if(!dragging) return;
+    const parent=box.parentElement.getBoundingClientRect();
+    let left=startLeft+(e.clientX-startX); let top=startTop+(e.clientY-startY);
+    left=Math.max(0,Math.min(left,parent.width-box.offsetWidth));
+    top=Math.max(26,Math.min(top,parent.height-box.offsetHeight));
+    box.style.left=left+'px'; box.style.top=top+'px';
+  });
+  const stop=e=>{ dragging=false; try{handle.releasePointerCapture?.(e.pointerId);}catch{} };
+  handle.addEventListener('pointerup',stop); handle.addEventListener('pointercancel',stop);
+}
+function workMakeResizable(box){
+  const handle=box.querySelector('.resize-handle'); if(!handle) return;
+  let startX,startY,startW,startH,resizing=false;
+  handle.addEventListener('pointerdown',e=>{
+    e.preventDefault(); e.stopPropagation(); resizing=true;
+    handle.setPointerCapture?.(e.pointerId);
+    startX=e.clientX; startY=e.clientY; startW=box.offsetWidth; startH=box.offsetHeight;
+  });
+  handle.addEventListener('pointermove',e=>{
+    if(!resizing) return;
+    const parent=box.parentElement.getBoundingClientRect();
+    const left=parseFloat(box.style.left)||0; const top=parseFloat(box.style.top)||0;
+    let w=startW+(e.clientX-startX); let h=startH+(e.clientY-startY);
+    w=Math.max(150,Math.min(w,parent.width-left));
+    h=Math.max(52,Math.min(h,parent.height-top));
+    box.style.width=w+'px'; box.style.height=h+'px';
+  });
+  const stop=e=>{ resizing=false; try{handle.releasePointerCapture?.(e.pointerId);}catch{} };
+  handle.addEventListener('pointerup',stop); handle.addEventListener('pointercancel',stop);
+}
+async function workUpdateFollowupStatus(meetingId,index,status){
+  const meeting=(state.workMeetings||[]).find(m=>String(m.id)===String(meetingId));
+  if(!meeting || !meeting.followups || !meeting.followups[index]) return;
+  meeting.followups[index].status=status;
+  const {error}=await sb.from('work_meetings').update({followups:meeting.followups, updated_at:new Date().toISOString()}).eq('id',String(meetingId)).eq('user_id',currentUser.id);
+  if(error){ console.error(error); alert('Could not update follow-up: '+error.message); return; }
+  renderWorkTab(); renderWorkWeeklyReview(true); showSaved();
+}
