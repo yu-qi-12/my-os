@@ -3455,10 +3455,10 @@ function renderWorkSelectedDay(){
   const title=document.getElementById('work-selected-title'); if(title) title.textContent=`Selected day — ${workSelectedDate}`;
   const list=document.getElementById('work-day-meetings'); if(!list) return;
   const meetings=(state.workMeetings||[]).filter(m=>workMeetingDateKey(m)===workSelectedDate).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
-  if(!meetings.length){ list.innerHTML=`<div class="card-sub">No meetings logged for this date.</div><button class="btn btn-ghost btn-small" onclick="openAddWorkMeetingModal('${workSelectedDate}')">+ Log meeting for this day</button>`; return; }
+  if(!meetings.length){ list.innerHTML=`<div class="card-sub">No meetings logged for this date.</div><button class="btn btn-ghost btn-small" onclick="openAddWorkMeetingModal('${workSelectedDate}')">＋ Log meeting for this day</button>`; return; }
   list.innerHTML=meetings.map(m=>{
     const open=(m.followups||[]).filter(f=>workIsActiveFollowupStatus(f.status)).length;
-    return `<div class="work-meeting-item"><div class="work-meeting-head"><div><div class="work-meeting-title">${workMeetingTitle(m)}</div><div class="work-meeting-meta">${workMeetingProject(m)}${workMeetingPeople(m)?' · '+workMeetingPeople(m):''}</div></div><span class="work-note-type">${escapeHtml(m.meeting_type||'Meeting')}</span></div><div class="card-sub">${open?`${open} open follow-up${open===1?'':'s'}`:'No open follow-ups'}</div><div class="work-meeting-actions"><button class="btn btn-ghost btn-small" onclick="openWorkMeeting('${m.id}')">Open</button><button class="btn btn-ghost btn-small" onclick="deleteWorkMeeting('${m.id}')">Delete</button></div></div>`;
+    return `<div class="work-meeting-item"><div class="work-meeting-head"><div><div class="work-meeting-title">${workMeetingTitle(m)}</div><div class="work-meeting-meta">${workMeetingProject(m)}${workMeetingPeople(m)?' · '+workMeetingPeople(m):''}</div></div><span class="work-note-type">${escapeHtml(m.meeting_type||'Meeting')}</span></div><div class="card-sub">${open?`${open} open follow-up${open===1?'':'s'}`:'No open follow-ups'}</div><div class="work-meeting-actions"><button class="btn btn-ghost btn-small" onclick="openWorkMeeting('${m.id}')">Open →</button><button class="btn btn-ghost btn-small" onclick="deleteWorkMeeting('${m.id}')">Delete</button></div></div>`;
   }).join('');
 }
 let workReviewActiveTab = 'meetings';
@@ -3544,7 +3544,7 @@ function renderWorkReviewContent(tab, meetings, followups, carry){
         <div class="work-review-meta">${escapeHtml(workMeetingDateKey(m))}${workMeetingProject(m)?' · '+workMeetingProject(m):''}${workMeetingPeople(m)?' · '+workMeetingPeople(m):''}</div>
         <div class="card-sub" style="margin-top:5px">${note?escapeHtml(note.slice(0,120))+(note.length>120?'…':''):'No note summary yet.'}</div>
       </div>
-      <div class="work-review-actions"><button class="btn btn-ghost btn-small" onclick="openWorkMeeting('${m.id}')">Open</button>${open?`<span class="work-status-pill waiting">${open} open</span>`:''}</div>
+      <div class="work-review-actions"><button class="btn btn-ghost btn-small" onclick="openWorkMeeting('${m.id}')">Open →</button>${open?`<span class="work-status-pill waiting">${open} open</span>`:''}</div>
     </div>`;
   }).join('')}</div>`;
 }
@@ -3585,7 +3585,7 @@ function closeWorkMeetingModal(){ document.getElementById('workMeetingModal')?.c
 function workAddFollowupRow(text='', status='Open'){
   const wrap=document.getElementById('workFollowRows'); if(!wrap) return;
   const row=document.createElement('div'); row.className='follow-row';
-  row.innerHTML=`<input class="input work-follow-text" value="${escapeAttr(text)}" placeholder="Follow-up item"><select class="input work-follow-status"><option ${status==='Open'?'selected':''}>Open</option><option ${status==='Waiting'?'selected':''}>Waiting</option><option ${status==='Carry next week'?'selected':''}>Carry next week</option><option ${status==='Done'?'selected':''}>Done</option><option ${status==='Dropped'?'selected':''}>Dropped</option></select><button class="btn btn-ghost btn-small" onclick="this.closest('.follow-row').remove()">Remove</button>`;
+  row.innerHTML=`<input class="input work-follow-text" value="${escapeAttr(text)}" placeholder="Follow-up item"><select class="input work-follow-status"><option ${status==='Open'?'selected':''}>Open →</option><option ${status==='Waiting'?'selected':''}>Waiting</option><option ${status==='Carry next week'?'selected':''}>Carry next week</option><option ${status==='Done'?'selected':''}>Done</option><option ${status==='Dropped'?'selected':''}>Dropped</option></select><button class="btn btn-ghost btn-small" onclick="this.closest('.follow-row').remove()">Remove</button>`;
   wrap.appendChild(row);
 }
 function escapeAttr(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
