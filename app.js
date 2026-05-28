@@ -3461,44 +3461,92 @@ function renderWorkSelectedDay(){
     return `<div class="work-meeting-item"><div class="work-meeting-head"><div><div class="work-meeting-title">${workMeetingTitle(m)}</div><div class="work-meeting-meta">${workMeetingProject(m)}${workMeetingPeople(m)?' · '+workMeetingPeople(m):''}</div></div><span class="work-note-type">${escapeHtml(m.meeting_type||'Meeting')}</span></div><div class="card-sub">${open?`${open} open follow-up${open===1?'':'s'}`:'No open follow-ups'}</div><div class="work-meeting-actions"><button class="btn btn-ghost btn-small" onclick="openWorkMeeting('${m.id}')">Open</button><button class="btn btn-ghost btn-small" onclick="deleteWorkMeeting('${m.id}')">Delete</button></div></div>`;
   }).join('');
 }
-function renderWorkWeeklyReview(expanded=false){
-  const el=document.getElementById('work-weekly-review'); if(!el) return;
+let workReviewActiveTab = 'meetings';
+function workWeekData(){
   const now=new Date();
-  const day=(now.getDay()+6)%7; const monday=new Date(now); monday.setDate(now.getDate()-day); monday.setHours(0,0,0,0);
-  const sunday=new Date(monday); sunday.setDate(monday.getDate()+6);
+  const day=(now.getDay()+6)%7;
+  const monday=new Date(now); monday.setDate(now.getDate()-day); monday.setHours(0,0,0,0);
+  const sunday=new Date(monday); sunday.setDate(monday.getDate()+6); sunday.setHours(23,59,59,999);
   const inWeek=(m)=>{ const dt=new Date(workMeetingDateKey(m)+'T00:00:00'); return dt>=monday && dt<=sunday; };
-  const meetings=(state.workMeetings||[]).filter(inWeek);
-  const followups=meetings.flatMap(m=>(m.followups||[]).map((f,i)=>({...f, index:i, meetingId:m.id, meeting:m.title, meetingDate:workMeetingDateKey(m)}))).filter(f=>workIsActiveFollowupStatus(f.status));
-  const carried=followups.filter(f=>(f.status||'')==='Carry next week').length;
-  if(!expanded){
-    el.className='review-grid';
-    el.innerHTML=`<div class="review-box"><h4>Meetings logged</h4><p>${meetings.length} meeting${meetings.length===1?'':'s'} captured this week.</p></div><div class="review-box"><h4>Open follow-ups</h4><p>${followups.length} follow-up${followups.length===1?'':'s'} still need action or decision.</p></div><div class="review-box"><h4>Next week focus</h4><p>${carried?`${carried} item${carried===1?'':'s'} already marked to carry next week.`:'Start review to choose what carries forward.'}</p></div>`;
-    return;
-  }
-  el.className='review-grid';
-  const list=followups.length ? followups.map(f=>`
-    <div class="work-review-item">
-      <div>
-        <div style="font-weight:600;">${escapeHtml(f.text||'Follow-up')} <span class="work-status-pill ${workStatusClass(f.status)}">${escapeHtml(f.status||'Open')}</span></div>
-        <div class="work-review-meta">${escapeHtml(f.meeting||'Meeting')} · ${escapeHtml(f.meetingDate||'')}</div>
-      </div>
-      <div class="work-review-actions">
-        <button class="btn btn-ghost btn-small" onclick="workUpdateFollowupStatus('${f.meetingId}',${f.index},'Done')">Done</button>
-        <button class="btn btn-ghost btn-small" onclick="workUpdateFollowupStatus('${f.meetingId}',${f.index},'Waiting')">Waiting</button>
-        <button class="btn btn-ghost btn-small" onclick="workUpdateFollowupStatus('${f.meetingId}',${f.index},'Carry next week')">Carry</button>
-        <button class="btn btn-ghost btn-small" onclick="workUpdateFollowupStatus('${f.meetingId}',${f.index},'Dropped')">Drop</button>
-      </div>
-    </div>`).join('') : '<div class="card-sub">No open follow-ups this week. Nice clean loop.</div>';
+  const meetings=(state.workMeetings||[]).filter(inWeek).sort((a,b)=>String(workMeetingDateKey(a)).localeCompare(String(workMeetingDateKey(b))));
+  const followups=meetings.flatMap(m=>(m.followups||[]).map((f,i)=>({
+    ...f,
+    index:i,
+    meetingId:m.id,
+    meeting:m.title,
+    project:m.project || '',
+    meetingDate:workMeetingDateKey(m)
+  }))).filter(f=>workIsActiveFollowupStatus(f.status));
+  const carry=followups.filter(f=>(f.status||'')==='Carry next week');
+  return {meetings, followups, carry};
+}
+function renderWorkWeeklyReview(tab='meetings'){
+  const el=document.getElementById('work-weekly-review'); if(!el) return;
+  if(typeof tab === 'boolean') tab = workReviewActiveTab || 'meetings';
+  workReviewActiveTab = tab || 'meetings';
+  const {meetings, followups, carry}=workWeekData();
+  el.className='work-review-shell';
+  const active=(name)=>workReviewActiveTab===name?'active':'';
+  const content=renderWorkReviewContent(workReviewActiveTab, meetings, followups, carry);
   el.innerHTML=`
-    <div class="review-box"><h4>Meetings logged</h4><p>${meetings.length} meeting${meetings.length===1?'':'s'} captured this week.</p></div>
-    <div class="review-box"><h4>Open follow-ups</h4><p>${followups.length} follow-up${followups.length===1?'':'s'} still need action or decision.</p></div>
-    <div class="review-box"><h4>Next week focus</h4><p>${carried?`${carried} item${carried===1?'':'s'} marked to carry forward.`:'Use Carry to move items into next week.'}</p></div>
-    <div class="work-review-expanded">
-      <div style="font-weight:700;margin-bottom:4px;">Follow-up review</div>
-      <div class="card-sub">Mark each item as Done, Waiting, Carry, or Drop. This updates the meeting record in Supabase.</div>
-      <div class="work-review-list">${list}</div>
-      <textarea class="work-review-note" placeholder="Optional quick reflection: what should I focus on next week?"></textarea>
+    <div class="work-review-tabs">
+      <button class="work-review-tab ${active('meetings')}" onclick="renderWorkWeeklyReview('meetings')">
+        <div class="work-review-count" style="color:var(--blue)">${meetings.length}</div>
+        <h4>Meetings logged</h4>
+        <p>Review what happened this week.</p>
+      </button>
+      <button class="work-review-tab ${active('followups')}" onclick="renderWorkWeeklyReview('followups')">
+        <div class="work-review-count" style="color:var(--orange)">${followups.length}</div>
+        <h4>Open follow-ups</h4>
+        <p>Decide done, waiting, carry or drop.</p>
+      </button>
+      <button class="work-review-tab ${active('focus')}" onclick="renderWorkWeeklyReview('focus')">
+        <div class="work-review-count" style="color:var(--purple)">${carry.length || Math.min(followups.length,3)}</div>
+        <h4>Next week focus</h4>
+        <p>Choose what needs attention next.</p>
+      </button>
+    </div>
+    <div class="work-review-content">${content}</div>`;
+}
+function renderWorkReviewContent(tab, meetings, followups, carry){
+  if(tab==='followups'){
+    if(!followups.length) return '<div class="card-sub">No open follow-ups this week. Nice clean loop.</div>';
+    return `<div class="work-review-list">${followups.map(f=>`
+      <div class="work-review-item touch-friendly">
+        <div class="work-review-main">
+          <div style="font-weight:700;">${escapeHtml(f.text||'Follow-up')} <span class="work-status-pill ${workStatusClass(f.status)}">${escapeHtml(f.status||'Open')}</span></div>
+          <div class="work-review-meta">${escapeHtml(f.meeting||'Meeting')} · ${escapeHtml(f.project||'')} · ${escapeHtml(f.meetingDate||'')}</div>
+        </div>
+        <div class="work-review-actions">
+          <button class="mini-action done" onclick="workUpdateFollowupStatus('${f.meetingId}',${f.index},'Done')">Done</button>
+          <button class="mini-action wait" onclick="workUpdateFollowupStatus('${f.meetingId}',${f.index},'Waiting')">Waiting</button>
+          <button class="mini-action carry" onclick="workUpdateFollowupStatus('${f.meetingId}',${f.index},'Carry next week')">Carry</button>
+          <button class="mini-action drop" onclick="workUpdateFollowupStatus('${f.meetingId}',${f.index},'Dropped')">Drop</button>
+        </div>
+      </div>`).join('')}</div>`;
+  }
+  if(tab==='focus'){
+    const focusItems=(carry.length?carry:followups.slice(0,3));
+    const focusList=focusItems.length ? focusItems.map(f=>`<li><strong>${escapeHtml(f.text||'Follow-up')}</strong><br><span>${escapeHtml(f.meeting||'Meeting')} · ${escapeHtml(f.status||'Open')}</span></li>`).join('') : '<li>No focus items selected yet.</li>';
+    return `<div class="work-focus-grid">
+      <div class="work-focus-box"><h4>Suggested next week focus</h4><ul>${focusList}</ul></div>
+      <div class="work-focus-box"><h4>Your reflection</h4><textarea class="work-review-note" placeholder="What needs to move next week? What can wait?"></textarea></div>
     </div>`;
+  }
+  if(!meetings.length) return '<div class="card-sub">No meetings logged this week yet.</div>';
+  return `<div class="work-review-list">${meetings.map(m=>{
+    const open=(m.followups||[]).filter(f=>workIsActiveFollowupStatus(f.status)).length;
+    const note=stripHtml(m.note_html||'').trim();
+    return `<div class="work-review-item touch-friendly">
+      <div class="work-review-dot" style="background:var(--blue)"></div>
+      <div class="work-review-main">
+        <div class="work-review-title">${workMeetingTitle(m)}</div>
+        <div class="work-review-meta">${escapeHtml(workMeetingDateKey(m))}${workMeetingProject(m)?' · '+workMeetingProject(m):''}${workMeetingPeople(m)?' · '+workMeetingPeople(m):''}</div>
+        <div class="card-sub" style="margin-top:5px">${note?escapeHtml(note.slice(0,120))+(note.length>120?'…':''):'No note summary yet.'}</div>
+      </div>
+      <div class="work-review-actions"><button class="btn btn-ghost btn-small" onclick="openWorkMeeting('${m.id}')">Open</button>${open?`<span class="work-status-pill waiting">${open} open</span>`:''}</div>
+    </div>`;
+  }).join('')}</div>`;
 }
 function openAddWorkMeetingModal(dateKey=''){
   workEditingMeetingId='';
@@ -3653,5 +3701,5 @@ async function workUpdateFollowupStatus(meetingId,index,status){
   meeting.followups[index].status=status;
   const {error}=await sb.from('work_meetings').update({followups:meeting.followups, updated_at:new Date().toISOString()}).eq('id',String(meetingId)).eq('user_id',currentUser.id);
   if(error){ console.error(error); alert('Could not update follow-up: '+error.message); return; }
-  renderWorkTab(); renderWorkWeeklyReview(true); showSaved();
+  renderWorkSummary(); renderWorkCalendar(); renderWorkSelectedDay(); renderWorkWeeklyReview('followups'); showSaved();
 }
