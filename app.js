@@ -3831,7 +3831,7 @@ function renderAssistantOverview(){
   const focus=document.getElementById('assistantTodayFocus'); if(focus) focus.textContent=open[0]?.text || growth[0]?.title || 'Use today to close one meaningful loop.';
   const top=document.getElementById('assistantTopItems'); if(top) top.innerHTML=(open.slice(0,2).map(i=>assistantItemHtml(i)).join('') || '<div class="card-sub">No urgent open loops. Keep today light and clear.</div>');
   const handover=document.getElementById('assistantHandoverList'); if(handover) handover.innerHTML=`<div class="loop-item"><div class="dot" style="background:var(--orange)"></div><div class="item-main"><div class="item-title">${open.length} item${open.length===1?'':'s'} still carried in My OS.</div><div class="item-meta">Review these before switching off.</div></div></div><div class="loop-item"><div class="dot" style="background:var(--green)"></div><div class="item-main"><div class="item-title">${closed} action${closed===1?'':'s'} moved, closed or dropped this week.</div><div class="item-meta">These are no longer mental load.</div></div></div><div class="loop-item"><div class="dot" style="background:var(--purple)"></div><div class="item-main"><div class="item-title">Growth check-in: ${growth.length || 0} active experiment${growth.length===1?'':'s'}.</div><div class="item-meta">Ask what each one gave you, not just the number.</div></div></div>`;
-  renderAssistantQueue(assistantQueueTab); renderWeeklyReview(weeklyReviewTab); renderDailyReviewCalendar(); renderMonthlyReviewVisibility();
+  renderAssistantQueue(assistantQueueTab); renderWeeklyReview(weeklyReviewTab); renderMonthlyReviewVisibility();
 }
 function switchAssistantQueue(type, btn){ assistantQueueTab=type; document.querySelectorAll('.queue-tab').forEach(t=>t.classList.remove('active')); if(btn) btn.classList.add('active'); renderAssistantQueue(type); }
 function renderAssistantQueue(type='open'){
@@ -3854,210 +3854,54 @@ function renderWeeklyReview(type='closed'){
   else el.innerHTML=`<div class="review-columns"><div class="review-box"><h4>System summary</h4><ul><li>${closed} work action${closed===1?'':'s'} moved, closed or dropped</li><li>${meetings.length} meeting close-off${meetings.length===1?'':'s'} this week</li><li>${open.length} item${open.length===1?'':'s'} still open</li></ul></div><div class="review-box"><h4>My weekly notes</h4><textarea class="textarea" id="weeklyClosedNotes" placeholder="What felt properly closed this week? What gave me relief? What should I acknowledge?">${esc(latestWeeklyValue('closed_notes'))}</textarea></div></div>`;
 }
 function setDailyEnergy(btn){ document.querySelectorAll('.energy-row .chip').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); dailyEnergy=btn.dataset.energy||btn.textContent.trim()||'Medium'; }
-function reviewTodayKey(){ return new Date().toISOString().slice(0,10); }
-function reviewSetStatus(id, message, ok=true){
-  const el=document.getElementById(id);
-  if(!el) return;
-  el.textContent=message;
-  el.classList.toggle('ok', !!ok);
-  el.classList.toggle('warn', !ok);
-}
 async function assistantSaveByKey(table, key, payload){
-  if(!currentUser?.id) throw new Error('Not logged in. Please log in again.');
-  const cleanPayload={...payload,user_id:currentUser.id,updated_at:new Date().toISOString()};
-  // Keep old + new daily date columns compatible.
-  if(table==='daily_closeoffs'){
-    if(cleanPayload.close_date && !cleanPayload.closeoff_date) cleanPayload.closeoff_date=cleanPayload.close_date;
-    if(cleanPayload.closeoff_date && !cleanPayload.close_date) cleanPayload.close_date=cleanPayload.closeoff_date;
-  }
-  // Keep old + new weekly column names compatible.
-  if(table==='weekly_reviews'){
-    if(cleanPayload.open_notes && !cleanPayload.open_decision_notes) cleanPayload.open_decision_notes=cleanPayload.open_notes;
-    if(cleanPayload.mood_notes && !cleanPayload.mood_improve_notes) cleanPayload.mood_improve_notes=cleanPayload.mood_notes;
-    if(cleanPayload.next_notes && !cleanPayload.next_week_notes) cleanPayload.next_week_notes=cleanPayload.next_notes;
-  }
-  // Keep old + new monthly column names compatible.
-  if(table==='monthly_reviews'){
-    if(cleanPayload.notes && !cleanPayload.review_notes) cleanPayload.review_notes=cleanPayload.notes;
-    if(!cleanPayload.summary_json) cleanPayload.summary_json={};
-  }
-
-  // First look for existing row, then update/insert. This avoids silent upsert issues.
-  const {data:existing,error:selectError}=await sb
-    .from(table)
-    .select('*')
-    .eq('user_id', currentUser.id)
-    .eq(key, cleanPayload[key])
-    .maybeSingle();
+  const query=sb.from(table).select('*').eq('user_id', currentUser.id).eq(key, payload[key]).maybeSingle();
+  const {data:existing,error:selectError}=await query;
   if(selectError && selectError.code !== 'PGRST116') throw selectError;
-
-  let saved, saveError;
   if(existing?.id){
-    ({data:saved,error:saveError}=await sb
-      .from(table)
-      .update(cleanPayload)
-      .eq('id', existing.id)
-      .eq('user_id', currentUser.id)
-      .select()
-      .single());
-  } else {
-    ({data:saved,error:saveError}=await sb
-      .from(table)
-      .insert(cleanPayload)
-      .select()
-      .single());
+    const {data,error}=await sb.from(table).update(payload).eq('id', existing.id).eq('user_id', currentUser.id).select().single();
+    if(error) throw error;
+    return data;
   }
-  if(saveError) throw saveError;
-
-  // Verify by reading the saved row back. If this fails, we show a real error.
-  const {data:verified,error:verifyError}=await sb
-    .from(table)
-    .select('*')
-    .eq('user_id', currentUser.id)
-    .eq(key, cleanPayload[key])
-    .maybeSingle();
-  if(verifyError) throw verifyError;
-  if(!verified) throw new Error(`${table} save did not verify. Please check Supabase table + RLS.`);
-  return verified || saved;
+  const {data,error}=await sb.from(table).insert(payload).select().single();
+  if(error) throw error;
+  return data;
 }
 async function saveDailyCloseoff(){
   if(!currentUser?.id){ alert('Please log in again.'); return; }
   const btn=document.querySelector('[onclick="saveDailyCloseoff()"]');
   if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
-  const close_date=reviewTodayKey();
-  const payload={
-    close_date,
-    closeoff_date:close_date,
-    energy:dailyEnergy,
-    still_open:val('dailyStillOpen'),
-    let_go:val('dailyLetGo'),
-    tomorrow_first_move:val('dailyTomorrowMove'),
-    notes:val('dailyNotes')
-  };
+  const close_date=new Date().toISOString().slice(0,10);
+  const payload={user_id:currentUser.id,close_date,energy:dailyEnergy,still_open:val('dailyStillOpen'),let_go:val('dailyLetGo'),tomorrow_first_move:val('dailyTomorrowMove'),updated_at:new Date().toISOString()};
   try{
     const data=await assistantSaveByKey('daily_closeoffs','close_date',payload);
-    const idx=(state.dailyCloseoffs||[]).findIndex(r=>(r.close_date||r.closeoff_date)===close_date);
+    const idx=state.dailyCloseoffs.findIndex(r=>r.close_date===close_date);
     if(idx>=0) state.dailyCloseoffs[idx]=data; else state.dailyCloseoffs.unshift(data);
-    showSaved();
-    reviewSetStatus('dailySaveStatus','Saved just now',true);
-    renderAssistantOverview();
-  }catch(error){
-    console.error(error);
-    reviewSetStatus('dailySaveStatus','Save failed',false);
-    alert('Could not save daily close-off: '+(error.message||error));
-  }finally{
-    if(btn){ btn.disabled=false; btn.textContent='✓ Save'; }
-  }
+    showSaved(); renderAssistantOverview();
+  }catch(error){ console.error(error); alert('Could not save daily close-off: '+(error.message||error)); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent='✓ Save'; } }
 }
 async function saveWeeklyReview(){
   if(!currentUser?.id){ alert('Please log in again.'); return; }
-  const btn=document.querySelector('[onclick="saveWeeklyReview()"]');
-  if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
-  const {weekStart,sunday}=assistantWeekBounds();
-  const payload={
-    week_start:weekStart,
-    week_end:sunday.toISOString().slice(0,10),
-    closed_notes:val('weeklyClosedNotes'),
-    open_notes:val('weeklyOpenNotes'),
-    open_decision_notes:val('weeklyOpenNotes'),
-    mood_notes:val('weeklyMoodNotes'),
-    mood_improve_notes:val('weeklyMoodNotes'),
-    next_notes:val('weeklyNextNotes'),
-    next_week_notes:val('weeklyNextNotes'),
-    summary_json:{
-      open_count:assistantOpenItems().length,
-      closed_count:assistantClosedThisWeek(),
-      meeting_count:assistantThisWeekMeetings().length,
-      saved_at:new Date().toISOString()
-    }
-  };
+  const {weekStart}=assistantWeekBounds();
+  const payload={user_id:currentUser.id,week_start:weekStart,closed_notes:val('weeklyClosedNotes'),open_notes:val('weeklyOpenNotes'),mood_notes:val('weeklyMoodNotes'),next_notes:val('weeklyNextNotes'),summary_json:{open_count:assistantOpenItems().length,closed_count:assistantClosedThisWeek(),meeting_count:assistantThisWeekMeetings().length},updated_at:new Date().toISOString()};
   try{
     const data=await assistantSaveByKey('weekly_reviews','week_start',payload);
-    const idx=(state.weeklyReviews||[]).findIndex(r=>r.week_start===weekStart);
+    const idx=state.weeklyReviews.findIndex(r=>r.week_start===weekStart);
     if(idx>=0) state.weeklyReviews[idx]=data; else state.weeklyReviews.unshift(data);
-    showSaved();
-    reviewSetStatus('weeklySaveStatus','Saved just now',true);
-    renderAssistantOverview();
-  }catch(error){
-    console.error(error);
-    reviewSetStatus('weeklySaveStatus','Save failed',false);
-    alert('Could not save weekly review: '+(error.message||error));
-  }finally{
-    if(btn){ btn.disabled=false; btn.textContent='✓ Save weekly review'; }
-  }
+    showSaved(); renderAssistantOverview();
+  }catch(error){ console.error(error); alert('Could not save weekly review: '+(error.message||error)); }
 }
 async function saveMonthlyReview(){
   if(!currentUser?.id){ alert('Please log in again.'); return; }
-  const btn=document.querySelector('[onclick="saveMonthlyReview()"]');
-  if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
   const month_key=monthKey(todayObj.getFullYear(), todayObj.getMonth());
-  const payload={
-    month_key,
-    notes:val('monthlyNotes'),
-    review_notes:val('monthlyNotes'),
-    summary_json:{
-      open_count:assistantOpenItems().length,
-      weekly_count:state.weeklyReviews?.length||0,
-      growth_count:assistantGrowthItems().length,
-      saved_at:new Date().toISOString()
-    },
-    open_items_json:assistantOpenItems().map(i=>({text:i.text||i.title||'',due_date:i.due_date||'',status:i.status||''})),
-    weekly_summaries_json:state.weeklyReviews||[],
-    growth_decisions_json:assistantGrowthItems().map(g=>({title:g.title,meta:g.meta})),
-    improvement_areas_json:assistantThisWeekMeetings().map(m=>workParseReflection(m).improve).filter(Boolean)
-  };
+  const payload={user_id:currentUser.id,month_key,notes:val('monthlyNotes'),summary_json:{open_count:assistantOpenItems().length,weekly_count:state.weeklyReviews?.length||0,growth_count:assistantGrowthItems().length},updated_at:new Date().toISOString()};
   try{
     const data=await assistantSaveByKey('monthly_reviews','month_key',payload);
-    const idx=(state.monthlyReviews||[]).findIndex(r=>r.month_key===month_key);
+    const idx=state.monthlyReviews.findIndex(r=>r.month_key===month_key);
     if(idx>=0) state.monthlyReviews[idx]=data; else state.monthlyReviews.unshift(data);
-    showSaved();
-    reviewSetStatus('monthlySaveStatus','Saved just now',true);
-    renderAssistantOverview();
-  }catch(error){
-    console.error(error);
-    reviewSetStatus('monthlySaveStatus','Save failed',false);
-    alert('Could not save monthly review: '+(error.message||error));
-  }finally{
-    if(btn){ btn.disabled=false; btn.textContent='✓ Save monthly review'; }
-  }
-}
-function renderDailyReviewCalendar(){
-  const el=document.getElementById('dailyReviewCalendar');
-  if(!el) return;
-  const label=document.getElementById('dailyCalendarMonth');
-  const year=todayObj.getFullYear();
-  const month=todayObj.getMonth();
-  if(label) label.textContent=`${MONTH_NAMES[month]} ${year}`;
-  const saved=new Set((state.dailyCloseoffs||[]).map(r=>r.close_date||r.closeoff_date).filter(Boolean));
-  const first=new Date(year,month,1);
-  const days=new Date(year,month+1,0).getDate();
-  const offset=(first.getDay()+6)%7;
-  const dows=['Mo','Tu','We','Th','Fr','Sa','Su'];
-  let html=dows.map(d=>`<div class="dow">${d}</div>`).join('');
-  for(let i=0;i<offset;i++) html+='<button class="review-day empty" tabindex="-1"></button>';
-  const todayKey=reviewTodayKey();
-  for(let day=1;day<=days;day++){
-    const key=`${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-    const cls=['review-day'];
-    if(key===todayKey) cls.push('today');
-    if(saved.has(key)) cls.push('saved');
-    html+=`<button class="${cls.join(' ')}" type="button" onclick="loadDailyCloseoffToForm('${key}')">${day}</button>`;
-  }
-  el.innerHTML=html;
-}
-function loadDailyCloseoffToForm(key){
-  const row=(state.dailyCloseoffs||[]).find(r=>(r.close_date||r.closeoff_date)===key);
-  if(!row){
-    setVal('dailyStillOpen',''); setVal('dailyLetGo',''); setVal('dailyTomorrowMove','');
-    reviewSetStatus('dailySaveStatus',`No saved review for ${key}`,false);
-    return;
-  }
-  setVal('dailyStillOpen',row.still_open||'');
-  setVal('dailyLetGo',row.let_go||'');
-  setVal('dailyTomorrowMove',row.tomorrow_first_move||'');
-  dailyEnergy=row.energy||'Medium';
-  document.querySelectorAll('.energy-row .chip').forEach(b=>b.classList.toggle('active', String(b.dataset.energy||b.textContent).toLowerCase()===String(dailyEnergy).toLowerCase()));
-  reviewSetStatus('dailySaveStatus',`Loaded ${key}`,true);
+    showSaved(); renderAssistantOverview();
+  }catch(error){ console.error(error); alert('Could not save monthly review: '+(error.message||error)); }
 }
 
 function assistantSetGrowthDecision(btn, decision){
@@ -4111,4 +3955,208 @@ renderWorkSelectedDay = function(){
     const r=workParseReflection(m);
     return `<div class="work-meeting-item"><div class="work-meeting-head"><div><div class="work-meeting-title">${workMeetingTitle(m)}</div><div class="work-meeting-meta">${workMeetingProject(m)}${workMeetingPeople(m)?' · '+workMeetingPeople(m):''}</div></div><span class="work-note-type">${open?'Open':'Closed'}</span></div><div class="card-sub">${moved} moved/closed · ${open} kept in My OS${r.feeling?` · ${esc(r.feeling)}`:''}</div><div class="work-meeting-actions"><button class="btn btn-ghost btn-small" onclick="openWorkMeeting('${m.id}')">Open →</button><button class="btn btn-ghost btn-small" onclick="deleteWorkMeeting('${m.id}')">Delete</button></div></div>`;
   }).join('');
+};
+
+// ─── REVIEW LOG CALENDAR + VERIFIED SAVE OVERRIDES ───
+let reviewLogYear = todayObj.getFullYear();
+let reviewLogMonth = todayObj.getMonth();
+dailyEnergy = '🙂';
+
+function reviewLocalDateKey(d){
+  const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function reviewDateOfDaily(r){ return r?.close_date || r?.closeoff_date || ''; }
+function reviewMonthKeyFromDate(y,m){ return `${y}-${String(m+1).padStart(2,'0')}`; }
+function reviewEndOfMonthDate(y,m){ return `${y}-${String(m+1).padStart(2,'0')}-${String(new Date(y,m+1,0).getDate()).padStart(2,'0')}`; }
+function reviewSafeText(v){ return esc(v || ''); }
+function reviewRowsThisMonth(){
+  const monthKey = reviewMonthKeyFromDate(reviewLogYear, reviewLogMonth);
+  const dailies=(state.dailyCloseoffs||[]).filter(r=>String(reviewDateOfDaily(r)).startsWith(monthKey));
+  const weeklies=(state.weeklyReviews||[]).filter(r=>String(r.week_start||'').startsWith(monthKey));
+  const monthlies=(state.monthlyReviews||[]).filter(r=>String(r.month_key||'')===monthKey);
+  return {dailies, weeklies, monthlies};
+}
+function renderReviewLogCalendar(){
+  const el=document.getElementById('reviewLogCalendar');
+  if(!el) return;
+  const label=document.getElementById('reviewLogMonthLabel');
+  if(label) label.textContent=`${MONTH_NAMES[reviewLogMonth]} ${reviewLogYear} review log`;
+  const {dailies,weeklies,monthlies}=reviewRowsThisMonth();
+  const dailyMap=new Map(dailies.map(r=>[reviewDateOfDaily(r),r]));
+  const weeklyMap=new Map(weeklies.map(r=>[r.week_start,r]));
+  const monthlyMap=new Map(monthlies.map(r=>[reviewEndOfMonthDate(reviewLogYear,reviewLogMonth),r]));
+  const first=new Date(reviewLogYear,reviewLogMonth,1);
+  const days=new Date(reviewLogYear,reviewLogMonth+1,0).getDate();
+  const start=(first.getDay()+6)%7;
+  let html=['Mo','Tu','We','Th','Fr','Sa','Su'].map(d=>`<div class="review-cal-label">${d}</div>`).join('');
+  for(let i=0;i<start;i++) html+='<div class="review-day empty"></div>';
+  const todayKey=reviewLocalDateKey(new Date());
+  for(let day=1; day<=days; day++){
+    const key=`${reviewLogYear}-${String(reviewLogMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const daily=dailyMap.get(key), weekly=weeklyMap.get(key), monthly=monthlyMap.get(key);
+    const cls=['review-day']; if(daily) cls.push('saved'); if(weekly) cls.push('weekly'); if(monthly) cls.push('monthly'); if(key===todayKey) cls.push('today');
+    const items=[];
+    if(daily) items.push(`<span class="mood-emoji">${reviewSafeText(daily.energy || daily.mood || '🙂')}</span><span class="review-pill daily">Daily</span>`);
+    if(weekly) items.push(`<span class="review-pill weekly">Weekly</span>`);
+    if(monthly) items.push(`<span class="review-pill monthly">Monthly</span>`);
+    const onclick = (daily||weekly||monthly) ? `onclick="showReviewLogForDate('${key}',this)"` : '';
+    html += `<div class="${cls.join(' ')}" ${onclick}><span class="day-number">${day}</span>${items.join('')}</div>`;
+  }
+  el.innerHTML=html;
+}
+function changeReviewLogMonth(delta){
+  reviewLogMonth += delta;
+  if(reviewLogMonth<0){ reviewLogMonth=11; reviewLogYear--; }
+  if(reviewLogMonth>11){ reviewLogMonth=0; reviewLogYear++; }
+  hideReviewLog(); renderReviewLogCalendar();
+}
+function showReviewLogForDate(dateKey, el){
+  document.querySelectorAll('.review-day').forEach(d=>d.classList.remove('active'));
+  if(el) el.classList.add('active');
+  const daily=(state.dailyCloseoffs||[]).find(r=>reviewDateOfDaily(r)===dateKey);
+  const weekly=(state.weeklyReviews||[]).find(r=>r.week_start===dateKey);
+  const monthKeyForDate=dateKey.slice(0,7);
+  const monthly=(state.monthlyReviews||[]).find(r=>r.month_key===monthKeyForDate && dateKey===reviewEndOfMonthDate(reviewLogYear,reviewLogMonth));
+  let title='', meta='', boxes='';
+  if(daily){
+    title=`${reviewSafeText(daily.energy || daily.mood || '🙂')} Daily close-off`;
+    meta=dateKey;
+    boxes=`<div class="detail-box"><h4>Still open</h4><p>${reviewSafeText(daily.still_open)}</p></div><div class="detail-box"><h4>Let go</h4><p>${reviewSafeText(daily.let_go)}</p></div><div class="detail-box"><h4>Next move</h4><p>${reviewSafeText(daily.tomorrow_first_move)}</p></div><div class="detail-box"><h4>Notes</h4><p>${reviewSafeText(daily.notes || 'No extra notes.')}</p></div>`;
+  } else if(weekly){
+    title='🧠 Weekly close-off'; meta=`Week starting ${dateKey}`;
+    boxes=`<div class="detail-box"><h4>Closed</h4><p>${reviewSafeText(weekly.closed_notes)}</p></div><div class="detail-box"><h4>Open / decide</h4><p>${reviewSafeText(weekly.open_notes || weekly.open_decision_notes)}</p></div><div class="detail-box"><h4>Mood + improve</h4><p>${reviewSafeText(weekly.mood_notes || weekly.mood_improve_notes)}</p></div><div class="detail-box"><h4>Next week</h4><p>${reviewSafeText(weekly.next_notes || weekly.next_week_notes)}</p></div>`;
+  } else if(monthly){
+    title='📌 Monthly review'; meta=monthKeyForDate;
+    boxes=`<div class="detail-box"><h4>Monthly notes</h4><p>${reviewSafeText(monthly.notes || monthly.review_notes)}</p></div><div class="detail-box"><h4>Assistant summary</h4><p>${reviewSafeText(monthly.assistant_summary || 'Summary will generate from saved reviews later.')}</p></div><div class="detail-box"><h4>Open items</h4><p>${reviewSafeText(JSON.stringify(monthly.open_items_json || []))}</p></div><div class="detail-box"><h4>Next pivot</h4><p>${reviewSafeText(monthly.summary_json?.next || 'Choose next month pivot during review.')}</p></div>`;
+  } else { return; }
+  const panel=document.getElementById('reviewLogDetail');
+  if(panel) panel.innerHTML=`<div class="review-detail-head"><div><div class="review-detail-title">${title}</div><div class="review-detail-meta">${meta}</div></div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="save-status saved">Loaded</span><button class="btn btn-ghost btn-small" onclick="hideReviewLog()">Back to calendar</button></div></div><div class="review-detail-grid">${boxes}</div>`;
+}
+function hideReviewLog(){
+  document.querySelectorAll('.review-day').forEach(d=>d.classList.remove('active'));
+  const panel=document.getElementById('reviewLogDetail'); if(panel) panel.innerHTML='';
+}
+function setSaveStatus(id, text, mode=''){
+  const el=document.getElementById(id); if(!el) return;
+  el.textContent=text; el.className='save-status '+(mode||'');
+}
+function setDailyMood(btn){
+  document.querySelectorAll('.mood-row .mood-chip').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  dailyEnergy=btn.dataset.energy || btn.textContent.trim() || '🙂';
+}
+setDailyEnergy = setDailyMood;
+function latestDailyCloseoff(){
+  return [...(state.dailyCloseoffs||[])].sort((a,b)=>String(reviewDateOfDaily(b)).localeCompare(String(reviewDateOfDaily(a))))[0];
+}
+const __oldAssistantAllFollowups = assistantAllFollowups;
+assistantOpenItems = function(){
+  const work = (__oldAssistantAllFollowups ? __oldAssistantAllFollowups() : []).filter(f=>!assistantIsClosed(f));
+  const latest = latestDailyCloseoff();
+  const dailyLines = String(latest?.still_open || '').split(/\n|;/).map(s=>s.trim()).filter(Boolean).slice(0,4).map((text,i)=>({title:text,text,meta:`From Daily Close-Off · ${reviewDateOfDaily(latest)}`,source:'daily',index:i}));
+  return [...work, ...dailyLines];
+};
+assistantItemHtml = function(item, opts={}){
+  const color=opts.color||'var(--orange)';
+  const title=esc(item.text||item.title||'Open item');
+  const meta=esc(item.meta || [item.meeting, item.project, item.due_date?`Due ${item.due_date}`:''].filter(Boolean).join(' · '));
+  const isWork=!!item.meetingId && Number.isInteger(item.index);
+  const actions=isWork ? `<div class="item-actions"><button class="mini-action done" onclick="assistantMarkDone('${item.meetingId}',${item.index})">Done</button><button class="mini-action carry" onclick="assistantMoveToMonday('${item.meetingId}',${item.index})">Move to monday</button><button class="mini-action wait" onclick="assistantMarkWaiting('${item.meetingId}',${item.index})">Not now</button><button class="mini-action drop" onclick="assistantDropItem('${item.meetingId}',${item.index})">No longer needed</button></div>` : `<div class="item-actions"><button class="mini-action carry" type="button">Keep visible</button><button class="mini-action wait" type="button">Not now</button><button class="mini-action drop" type="button">No longer needed</button></div>`;
+  return `<div class="loop-item"><div class="dot" style="background:${color}"></div><div class="item-main"><div class="item-title">${title}</div><div class="item-meta">${meta}</div>${actions}</div></div>`;
+};
+renderAssistantQueue = function(type='open'){
+  const el=document.getElementById('assistantQueueContent'); if(!el) return;
+  const open=assistantOpenItems(), due=assistantDueSoonItems(), waiting=assistantWaitingItems(), growth=assistantGrowthItems(), closed=assistantClosedThisWeek();
+  if(type==='due') el.innerHTML=(due.map(i=>assistantItemHtml(i,{color:'var(--blue)'})).join('') || '<div class="card-sub">Nothing due soon.</div>');
+  else if(type==='waiting') el.innerHTML=(waiting.map(i=>assistantItemHtml(i,{color:'var(--green)'})).join('') || '<div class="card-sub">Nothing waiting right now.</div>');
+  else if(type==='closed') el.innerHTML=`<div class="loop-list"><div class="loop-item"><div class="dot" style="background:var(--green)"></div><div class="item-main"><div class="item-title">${closed} action${closed===1?'':'s'} closed this week</div><div class="item-meta">Moved to monday.com, done, dropped or closed in Work.</div></div></div></div>`;
+  else if(type==='growth') el.innerHTML=(growth.map(g=>`<div class="loop-item"><div class="dot" style="background:var(--purple)"></div><div class="item-main"><div class="item-title">${esc(g.title)}</div><div class="item-meta">${esc(g.meta)}</div><div class="item-actions"><button class="mini-action carry" onclick="assistantSetGrowthDecision(this,'Continue')">Continue</button><button class="mini-action wait" onclick="assistantSetGrowthDecision(this,'Adjust')">Adjust</button><button class="mini-action drop" onclick="assistantSetGrowthDecision(this,'Pause')">Pause</button></div></div></div>`).join('') || '<div class="card-sub">No active growth experiments.</div>');
+  else el.innerHTML=(open.map(i=>assistantItemHtml(i)).join('') || '<div class="card-sub">No open loops. Nice.</div>');
+};
+switchAssistantQueue = function(type, btn){
+  assistantQueueTab=type;
+  document.querySelectorAll('[onclick^="switchAssistantQueue"]').forEach(t=>t.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  renderAssistantQueue(type);
+};
+assistantOpenSnapshot = function(type, btn){
+  document.querySelectorAll('.snapshot').forEach(s=>s.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  const el=document.getElementById('assistantSnapshotContent'); if(!el) return;
+  if(type==='closed'){
+    el.innerHTML=`<div class="loop-list"><div class="loop-item"><div class="dot" style="background:var(--green)"></div><div class="item-main"><div class="item-title">${assistantClosedThisWeek()} work item${assistantClosedThisWeek()===1?'':'s'} closed this week</div><div class="item-meta">Done, dropped or moved to monday.com.</div></div></div></div>`;
+  } else if(type==='growth'){
+    const growth=assistantGrowthItems();
+    el.innerHTML=(growth.slice(0,3).map(g=>`<div class="loop-item"><div class="dot" style="background:var(--purple)"></div><div class="item-main"><div class="item-title">${esc(g.title)}</div><div class="item-meta">${esc(g.note||g.meta)}</div></div></div>`).join('') || '<div class="card-sub">No reflection item right now.</div>');
+  } else {
+    const open=assistantOpenItems();
+    el.innerHTML=(open.slice(0,3).map(i=>assistantItemHtml(i)).join('') || '<div class="card-sub">No open loop right now.</div>');
+  }
+};
+const __oldRenderAssistantOverview = renderAssistantOverview;
+renderAssistantOverview = function(){
+  __oldRenderAssistantOverview();
+  renderReviewLogCalendar();
+  const active=document.querySelector('.snapshot.active');
+  assistantOpenSnapshot(active?.textContent?.includes('Closed')?'closed':active?.textContent?.includes('reflection')?'growth':'open', active);
+  const todayKey=reviewLocalDateKey(new Date());
+  const today=(state.dailyCloseoffs||[]).find(r=>reviewDateOfDaily(r)===todayKey);
+  if(today){
+    setVal('dailyStillOpen', today.still_open||''); setVal('dailyLetGo', today.let_go||''); setVal('dailyTomorrowMove', today.tomorrow_first_move||'');
+    const mood=today.energy||today.mood||'🙂'; dailyEnergy=mood;
+    document.querySelectorAll('.mood-chip').forEach(b=>b.classList.toggle('active',(b.dataset.energy||b.textContent.trim())===mood));
+    setSaveStatus('dailySaveStatus',`Saved: ${todayKey}`,'saved');
+  }
+};
+async function assistantSaveByKey(table, key, payload){
+  const {data:existing,error:selectError}=await sb.from(table).select('*').eq('user_id', currentUser.id).eq(key, payload[key]).maybeSingle();
+  if(selectError && selectError.code !== 'PGRST116') throw selectError;
+  let data,error;
+  if(existing?.id){ ({data,error}=await sb.from(table).update(payload).eq('id',existing.id).eq('user_id',currentUser.id).select().single()); }
+  else { ({data,error}=await sb.from(table).insert(payload).select().single()); }
+  if(error) throw error;
+  const {data:verify,error:verifyError}=await sb.from(table).select('*').eq('id',data.id).eq('user_id',currentUser.id).single();
+  if(verifyError) throw verifyError;
+  return verify || data;
+}
+saveDailyCloseoff = async function(){
+  if(!currentUser?.id){ alert('Please log in again.'); return; }
+  const btn=document.querySelector('[onclick="saveDailyCloseoff()"]');
+  if(btn){ btn.disabled=true; btn.textContent='Saving…'; } setSaveStatus('dailySaveStatus','Saving…','saving');
+  const close_date=reviewLocalDateKey(new Date());
+  const payload={user_id:currentUser.id,close_date,closeoff_date:close_date,energy:dailyEnergy,mood:dailyEnergy,still_open:val('dailyStillOpen'),let_go:val('dailyLetGo'),tomorrow_first_move:val('dailyTomorrowMove'),updated_at:new Date().toISOString()};
+  try{
+    const data=await assistantSaveByKey('daily_closeoffs','close_date',payload);
+    const idx=state.dailyCloseoffs.findIndex(r=>reviewDateOfDaily(r)===close_date);
+    if(idx>=0) state.dailyCloseoffs[idx]=data; else state.dailyCloseoffs.unshift(data);
+    setSaveStatus('dailySaveStatus',`Saved: ${close_date}`,'saved'); renderAssistantOverview(); showSaved();
+  }catch(error){ console.error(error); setSaveStatus('dailySaveStatus','Save failed','failed'); alert('Could not save daily close-off: '+(error.message||error)); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent='✓ Save'; } }
+};
+function weeklyValueOrExisting(id,key){ const current=val(id); return current || latestWeeklyValue(key) || ''; }
+saveWeeklyReview = async function(){
+  if(!currentUser?.id){ alert('Please log in again.'); return; }
+  setSaveStatus('weeklySaveStatus','Saving…','saving');
+  const {weekStart,sunday}=assistantWeekBounds();
+  const payload={user_id:currentUser.id,week_start:weekStart,week_end:reviewLocalDateKey(sunday),closed_notes:weeklyValueOrExisting('weeklyClosedNotes','closed_notes'),open_notes:weeklyValueOrExisting('weeklyOpenNotes','open_notes'),open_decision_notes:weeklyValueOrExisting('weeklyOpenNotes','open_notes'),mood_notes:weeklyValueOrExisting('weeklyMoodNotes','mood_notes'),mood_improve_notes:weeklyValueOrExisting('weeklyMoodNotes','mood_notes'),next_notes:weeklyValueOrExisting('weeklyNextNotes','next_notes'),next_week_notes:weeklyValueOrExisting('weeklyNextNotes','next_notes'),summary_json:{open_count:assistantOpenItems().length,closed_count:assistantClosedThisWeek(),meeting_count:assistantThisWeekMeetings().length},updated_at:new Date().toISOString()};
+  try{
+    const data=await assistantSaveByKey('weekly_reviews','week_start',payload);
+    const idx=state.weeklyReviews.findIndex(r=>r.week_start===weekStart);
+    if(idx>=0) state.weeklyReviews[idx]=data; else state.weeklyReviews.unshift(data);
+    setSaveStatus('weeklySaveStatus','Saved just now','saved'); renderAssistantOverview(); showSaved();
+  }catch(error){ console.error(error); setSaveStatus('weeklySaveStatus','Save failed','failed'); alert('Could not save weekly review: '+(error.message||error)); }
+};
+saveMonthlyReview = async function(){
+  if(!currentUser?.id){ alert('Please log in again.'); return; }
+  setSaveStatus('monthlySaveStatus','Saving…','saving');
+  const month_key=monthKey(todayObj.getFullYear(), todayObj.getMonth());
+  const notes=val('monthlyNotes');
+  const payload={user_id:currentUser.id,month_key,notes,review_notes:notes,summary_json:{open_count:assistantOpenItems().length,weekly_count:state.weeklyReviews?.length||0,growth_count:assistantGrowthItems().length,next:'Choose next month pivot'},updated_at:new Date().toISOString()};
+  try{
+    const data=await assistantSaveByKey('monthly_reviews','month_key',payload);
+    const idx=state.monthlyReviews.findIndex(r=>r.month_key===month_key);
+    if(idx>=0) state.monthlyReviews[idx]=data; else state.monthlyReviews.unshift(data);
+    setSaveStatus('monthlySaveStatus','Saved just now','saved'); renderAssistantOverview(); showSaved();
+  }catch(error){ console.error(error); setSaveStatus('monthlySaveStatus','Save failed','failed'); alert('Could not save monthly review: '+(error.message||error)); }
 };
