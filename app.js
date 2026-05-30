@@ -470,7 +470,9 @@ function guessType(description){
 }
 
 function parseCSV(text){
-  const lines = text.split(/\r?\n/).filter(l=>l.trim());
+  const lines = text.split(/
+?
+/).filter(l=>l.trim());
   if(lines.length < 2) return [];
   
   // Detect delimiter
@@ -653,7 +655,7 @@ function highlightSearchText(text, term){
   const safe = escapeHTML(text);
   const q = String(term||'').trim();
   if(!q) return safe;
-  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escaped = q.replace(/[.*+?^${}()|[\]\]/g, '\$&');
   try {
     return safe.replace(new RegExp(escaped, 'gi'), match => `<mark class="search-highlight">${match}</mark>`);
   } catch(e){ return safe; }
@@ -704,7 +706,9 @@ async function quickAddUploadCategory(rowId){
   const typeRaw=prompt('Category type: expense, income, or asset', 'expense');
   const type=['expense','income','asset'].includes(String(typeRaw||'').toLowerCase()) ? String(typeRaw).toLowerCase() : 'expense';
   const warning=categorySimilarityWarning(name);
-  if(warning && !confirm(warning.replace(/^⚠️\s*/, '')+'\n\nContinue adding this category?')) return;
+  if(warning && !confirm(warning.replace(/^⚠️\s*/, '')+'
+
+Continue adding this category?')) return;
   restoreCategory(name);
   if(!state.categories.includes(name)) state.categories.push(name);
   setCategoryType(name,type);
@@ -1946,8 +1950,8 @@ function getMerchantKey(description){
   return String(description||'')
     .toLowerCase()
     .replace(/paypal \*/g,'paypal ')
-    .replace(/\b(pos|eftpos|visa|mastercard|card|purchase|debit|credit|direct debit|payment)\b/g,' ')
-    .replace(/\b(au|aus|australia|sydney|melbourne|brisbane|nsw|vic|qld|pty|ltd)\b/g,' ')
+    .replace(/(pos|eftpos|visa|mastercard|card|purchase|debit|credit|direct debit|payment)/g,' ')
+    .replace(/(au|aus|australia|sydney|melbourne|brisbane|nsw|vic|qld|pty|ltd)/g,' ')
     .replace(/[0-9]+/g,' ')
     .replace(/[^a-z& ]/g,' ')
     .replace(/\s+/g,' ')
@@ -2131,7 +2135,9 @@ async function addCategory(){
   if(!name) return;
 
   const warning=categorySimilarityWarning(name);
-  if(warning && !confirm(warning.replace(/^⚠️\s*/, '')+'\n\nContinue adding this category?')) return;
+  if(warning && !confirm(warning.replace(/^⚠️\s*/, '')+'
+
+Continue adding this category?')) return;
 
   restoreCategory(name);
   if(!state.categories.includes(name)) state.categories.push(name);
@@ -3367,7 +3373,6 @@ boot = async function(){
   renderGrowthTrackers();
   updateOverview();
 };
-boot();
 
 
 // ─── WORK TAB: MEETING LOG ───
@@ -3956,3 +3961,5 @@ renderWorkSelectedDay = function(){
     return `<div class="work-meeting-item"><div class="work-meeting-head"><div><div class="work-meeting-title">${workMeetingTitle(m)}</div><div class="work-meeting-meta">${workMeetingProject(m)}${workMeetingPeople(m)?' · '+workMeetingPeople(m):''}</div></div><span class="work-note-type">${open?'Open':'Closed'}</span></div><div class="card-sub">${moved} moved/closed · ${open} kept in My OS${r.feeling?` · ${esc(r.feeling)}`:''}</div><div class="work-meeting-actions"><button class="btn btn-ghost btn-small" onclick="openWorkMeeting('${m.id}')">Open →</button><button class="btn btn-ghost btn-small" onclick="deleteWorkMeeting('${m.id}')">Delete</button></div></div>`;
   }).join('');
 };
+
+boot();
