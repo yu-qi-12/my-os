@@ -3879,7 +3879,7 @@ async function saveDailyCloseoff(){
     const idx=state.dailyCloseoffs.findIndex(r=>r.close_date===close_date);
     if(idx>=0) state.dailyCloseoffs[idx]=data; else state.dailyCloseoffs.unshift(data);
     showSaved();
-    if(btn){ btn.textContent='✓ Saved!'; setTimeout(()=>{ btn.textContent='✓ Save'; },2000); }
+    if(btn){ btn.textContent='✓ Saved!'; setTimeout(()=>{ btn.textContent='✓ Save'; btn.disabled=false; },2000); return; }
   }catch(error){ console.error(error); alert('Could not save daily close-off: '+(error.message||error)); }
   finally{ if(btn){ btn.disabled=false; } }
 }
@@ -3887,13 +3887,14 @@ async function saveWeeklyReview(){
   if(!currentUser?.id){ alert('Please log in again.'); return; }
   const btn=document.querySelector('[onclick="saveWeeklyReview()"]');
   if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
-  const {weekStart}=assistantWeekBounds();
+  const {weekStart,sunday}=assistantWeekBounds();
+  const week_end=sunday.toISOString().slice(0,10);
   // Capture values BEFORE any re-render
   const closed_notes=val('weeklyClosedNotes');
   const open_notes=val('weeklyOpenNotes');
   const mood_notes=val('weeklyMoodNotes');
   const next_notes=val('weeklyNextNotes');
-  const payload={user_id:currentUser.id,week_start:weekStart,closed_notes,open_notes,mood_notes,next_notes,summary_json:{open_count:assistantOpenItems().length,closed_count:assistantClosedThisWeek(),meeting_count:assistantThisWeekMeetings().length},updated_at:new Date().toISOString()};
+  const payload={user_id:currentUser.id,week_start:weekStart,week_end,closed_notes,open_notes,mood_notes,next_notes,summary_json:{open_count:assistantOpenItems().length,closed_count:assistantClosedThisWeek(),meeting_count:assistantThisWeekMeetings().length},updated_at:new Date().toISOString()};
   try{
     const data=await assistantSaveByKey('weekly_reviews','week_start',payload);
     const idx=state.weeklyReviews.findIndex(r=>r.week_start===weekStart);
