@@ -3377,6 +3377,16 @@ let workSelectedDate = dayKey(todayObj.getFullYear(), todayObj.getMonth(), today
 let workEditingMeetingId = '';
 
 function workDateKeyFromInput(v){ return v || workSelectedDate || dayKey(todayObj.getFullYear(), todayObj.getMonth(), todayObj.getDate()); }
+function workWeekdayLabel(dateKey){
+  if(!dateKey) return '';
+  const d=new Date(dateKey+'T00:00:00');
+  if(Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-AU',{weekday:'short'});
+}
+function workDueLabel(f){
+  if(!f?.due_date) return 'No due date';
+  return `${workWeekdayLabel(f.due_date)} · ${f.due_date}`;
+}
 function workMeetingDateKey(m){ return m.meeting_date || m.date || ''; }
 function workMeetingTitle(m){ return escapeHtml(m.title || 'Untitled meeting'); }
 function workMeetingProject(m){ return escapeHtml(m.project || m.topic || ''); }
@@ -3405,7 +3415,12 @@ function normaliseWorkMeeting(m){
     meeting_type: m.meeting_type || m.type || 'Meeting',
     note_html: m.note_html || '',
     textboxes: Array.isArray(m.textboxes) ? m.textboxes : [],
-    followups: Array.isArray(m.followups) ? m.followups : [],
+    followups: Array.isArray(m.followups) ? m.followups.map(f=>({
+      text: f.text || '',
+      status: f.status || 'Open',
+      due_date: f.due_date || f.date || '',
+      weekday: f.weekday || workWeekdayLabel(f.due_date || f.date || '')
+    })) : [],
     created_at: m.created_at || new Date().toISOString(),
     updated_at: m.updated_at || new Date().toISOString()
   };
@@ -3475,7 +3490,9 @@ function workWeekData(){
     meetingId:m.id,
     meeting:m.title,
     project:m.project || '',
-    meetingDate:workMeetingDateKey(m)
+    meetingDate:workMeetingDateKey(m),
+    due_date:f.due_date || '',
+    weekday:f.weekday || workWeekdayLabel(f.due_date || '')
   }))).filter(f=>workIsActiveFollowupStatus(f.status));
   const carry=followups.filter(f=>(f.status||'')==='Carry next week');
   return {meetings, followups, carry};
@@ -3515,7 +3532,7 @@ function renderWorkReviewContent(tab, meetings, followups, carry){
       <div class="work-review-item touch-friendly">
         <div class="work-review-main">
           <div style="font-weight:700;">${escapeHtml(f.text||'Follow-up')} <span class="work-status-pill ${workStatusClass(f.status)}">${escapeHtml(f.status||'Open')}</span></div>
-          <div class="work-review-meta">${escapeHtml(f.meeting||'Meeting')} · ${escapeHtml(f.project||'')} · ${escapeHtml(f.meetingDate||'')}</div>
+          <div class="work-review-meta">${escapeHtml(f.meeting||'Meeting')} · ${escapeHtml(f.project||'')} · Meeting ${escapeHtml(f.meetingDate||'')} · Due ${escapeHtml(workDueLabel(f))}</div>
         </div>
         <div class="work-review-actions">
           <button class="mini-action done" onclick="workUpdateFollowupStatus('${f.meetingId}',${f.index},'Done')">Done</button>
@@ -3527,7 +3544,7 @@ function renderWorkReviewContent(tab, meetings, followups, carry){
   }
   if(tab==='focus'){
     const focusItems=(carry.length?carry:followups.slice(0,3));
-    const focusList=focusItems.length ? focusItems.map(f=>`<li><strong>${escapeHtml(f.text||'Follow-up')}</strong><br><span>${escapeHtml(f.meeting||'Meeting')} · ${escapeHtml(f.status||'Open')}</span></li>`).join('') : '<li>No focus items selected yet.</li>';
+    const focusList=focusItems.length ? focusItems.map(f=>`<li><strong>${escapeHtml(f.text||'Follow-up')}</strong><br><span>${escapeHtml(f.meeting||'Meeting')} · ${escapeHtml(f.status||'Open')} · Due ${escapeHtml(workDueLabel(f))}</span></li>`).join('') : '<li>No focus items selected yet.</li>';
     return `<div class="work-focus-grid">
       <div class="work-focus-box"><h4>Suggested next week focus</h4><ul>${focusList}</ul></div>
       <div class="work-focus-box"><h4>Your reflection</h4><textarea class="work-review-note" placeholder="What needs to move next week? What can wait?"></textarea></div>
@@ -3560,7 +3577,7 @@ function openAddWorkMeetingModal(dateKey=''){
   document.getElementById('workNoteEditor').innerHTML='';
   document.querySelectorAll('#workPaperArea .floating-textbox').forEach(b=>b.remove());
   document.getElementById('workFollowRows').innerHTML='';
-  workAddFollowupRow('', 'Open');
+  workAddFollowupRow('', 'Open', '');
   document.getElementById('workMeetingModal').classList.add('open');
   setTimeout(()=>document.getElementById('workMeetingTitle')?.focus(),50);
 }
@@ -3578,18 +3595,41 @@ function openWorkMeeting(id){
   const paper=document.getElementById('workPaperArea'); paper.querySelectorAll('.floating-textbox').forEach(b=>b.remove());
   (m.textboxes||[]).forEach(tb=>workCreateTextbox(tb.html||'Text box', tb.left||40, tb.top||120, tb.width||180, tb.height||80));
   document.getElementById('workFollowRows').innerHTML='';
-  (m.followups&&m.followups.length?m.followups:[{text:'',status:'Open'}]).forEach(f=>workAddFollowupRow(f.text||'', f.status||'Open'));
+  (m.followups&&m.followups.length?m.followups:[{text:'',status:'Open',due_date:''}]).forEach(f=>workAddFollowupRow(f.text||'', f.status||'Open', f.due_date||''));
   document.getElementById('workMeetingModal').classList.add('open');
 }
 function closeWorkMeetingModal(){ document.getElementById('workMeetingModal')?.classList.remove('open'); }
-function workAddFollowupRow(text='', status='Open'){
+function workClearNote(){
+  const editor=document.getElementById('workNoteEditor');
+  const boxes=[...document.querySelectorAll('#workPaperArea .floating-textbox')];
+  const hasNote=!!(editor?.textContent||'').trim() || boxes.length>0;
+  if(!hasNote) return;
+  if(!confirm('Clear the meeting note and text boxes? Follow-ups will stay.')) return;
+  if(editor) editor.innerHTML='';
+  boxes.forEach(b=>b.remove());
+}
+function workAddFollowupRow(text='', status='Open', dueDate=''){
   const wrap=document.getElementById('workFollowRows'); if(!wrap) return;
   const row=document.createElement('div'); row.className='follow-row';
-  row.innerHTML=`<input class="input work-follow-text" value="${escapeAttr(text)}" placeholder="Follow-up item"><select class="input work-follow-status"><option ${status==='Open'?'selected':''}>Open →</option><option ${status==='Waiting'?'selected':''}>Waiting</option><option ${status==='Carry next week'?'selected':''}>Carry next week</option><option ${status==='Done'?'selected':''}>Done</option><option ${status==='Dropped'?'selected':''}>Dropped</option></select><button class="btn btn-ghost btn-small" onclick="this.closest('.follow-row').remove()">Remove</button>`;
+  const weekday=workWeekdayLabel(dueDate);
+  row.innerHTML=`<input class="input work-follow-text" value="${escapeAttr(text)}" placeholder="Follow-up item"><select class="input work-follow-status"><option value="Open" ${status==='Open'?'selected':''}>Open →</option><option value="Waiting" ${status==='Waiting'?'selected':''}>Waiting</option><option value="Carry next week" ${status==='Carry next week'?'selected':''}>Carry next week</option><option value="Done" ${status==='Done'?'selected':''}>Done</option><option value="Dropped" ${status==='Dropped'?'selected':''}>Dropped</option></select><input class="input work-follow-date" type="date" value="${escapeAttr(dueDate)}" onchange="workRefreshFollowupWeekday(this)"><div class="work-follow-weekday">${weekday||'No date'}</div><button class="btn btn-ghost btn-small" onclick="this.closest('.follow-row').remove()">Remove</button>`;
   wrap.appendChild(row);
 }
+function workRefreshFollowupWeekday(input){
+  const row=input.closest('.follow-row');
+  const label=row?.querySelector('.work-follow-weekday');
+  if(label) label.textContent=workWeekdayLabel(input.value)||'No date';
+}
 function escapeAttr(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
-function collectWorkFollowups(){ return [...document.querySelectorAll('#workFollowRows .follow-row')].map(r=>({text:r.querySelector('.work-follow-text')?.value.trim()||'', status:r.querySelector('.work-follow-status')?.value||'Open'})).filter(f=>f.text); }
+function collectWorkFollowups(){ return [...document.querySelectorAll('#workFollowRows .follow-row')].map(r=>{
+  const dueDate=r.querySelector('.work-follow-date')?.value||'';
+  return {
+    text:r.querySelector('.work-follow-text')?.value.trim()||'',
+    status:r.querySelector('.work-follow-status')?.value||'Open',
+    due_date:dueDate,
+    weekday:workWeekdayLabel(dueDate)
+  };
+}).filter(f=>f.text); }
 function collectWorkTextboxes(){ return [...document.querySelectorAll('#workPaperArea .floating-textbox')].map(b=>({left:parseFloat(b.style.left)||0, top:parseFloat(b.style.top)||0, width:parseFloat(b.style.width)||b.offsetWidth||180, height:parseFloat(b.style.height)||b.offsetHeight||80, html:b.querySelector('.textbox-content')?.innerHTML||b.innerHTML||''})); }
 async function saveWorkMeeting(){
   const title=document.getElementById('workMeetingTitle').value.trim();
@@ -3703,3 +3743,149 @@ async function workUpdateFollowupStatus(meetingId,index,status){
   if(error){ console.error(error); alert('Could not update follow-up: '+error.message); return; }
   renderWorkSummary(); renderWorkCalendar(); renderWorkSelectedDay(); renderWorkWeeklyReview('followups'); showSaved();
 }
+
+// ─── ASSISTANT OVERVIEW + CLOSE-OFF SYSTEM OVERRIDES ───
+state.dailyCloseoffs = state.dailyCloseoffs || [];
+state.weeklyReviews = state.weeklyReviews || [];
+state.monthlyReviews = state.monthlyReviews || [];
+let assistantQueueTab = 'open';
+let weeklyReviewTab = 'closed';
+let dailyEnergy = 'Medium';
+
+const __assistantOrigLoadAppData = loadAppData;
+loadAppData = async function(){
+  await __assistantOrigLoadAppData();
+  await loadReviewData();
+  renderAssistantOverview();
+};
+
+switchTab = function(name){
+  const tabs=['overview','finance','growth','work'];
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',tabs[i]===name));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  const panel=document.getElementById('panel-'+name);
+  if(panel) panel.classList.add('active');
+  if(name==='overview'){ updateOverview(); renderAssistantOverview(); }
+  if(name==='finance'){ renderTotalCover(); switchFinTab(finTab); }
+  if(name==='growth'){ renderGrowthTrackers(); buildCalendar?.(); updateFitGoalDisplay?.(); renderWorkouts?.(); }
+  if(name==='work'){ renderWorkTab(); }
+};
+
+async function loadReviewData(){
+  if(!currentUser?.id) return;
+  const safeFetch = async (table, orderCol='created_at') => {
+    try{
+      const {data,error}=await sb.from(table).select('*').order(orderCol,{ascending:false});
+      if(error){ console.warn(`${table} not available yet:`, error.message); return []; }
+      return data || [];
+    }catch(e){ console.warn(`${table} load failed:`, e); return []; }
+  };
+  state.dailyCloseoffs = await safeFetch('daily_closeoffs','close_date');
+  state.weeklyReviews = await safeFetch('weekly_reviews','week_start');
+  state.monthlyReviews = await safeFetch('monthly_reviews','month_key');
+}
+
+updateOverview = function(){
+  renderAssistantOverview();
+  const streak=Object.values(state.fitnessHeatmap||{}).filter(Boolean).length;
+  const streakPill = document.getElementById('streakPill');
+  if(streakPill) streakPill.textContent=`🔥 ${streak} day streak`;
+};
+
+function assistantWeekBounds(date=new Date()){
+  const d=new Date(date);
+  const day=(d.getDay()+6)%7;
+  const monday=new Date(d); monday.setDate(d.getDate()-day); monday.setHours(0,0,0,0);
+  const sunday=new Date(monday); sunday.setDate(monday.getDate()+6); sunday.setHours(23,59,59,999);
+  return {monday,sunday,weekStart:monday.toISOString().slice(0,10)};
+}
+function assistantThisWeekMeetings(){
+  const {monday,sunday}=assistantWeekBounds();
+  return (state.workMeetings||[]).filter(m=>{ const dt=new Date((m.meeting_date||'')+'T00:00:00'); return dt>=monday && dt<=sunday; });
+}
+function assistantAllFollowups(){
+  return (state.workMeetings||[]).flatMap(m=>(m.followups||[]).map((f,i)=>({...f,index:i,meetingId:m.id,meeting:m.title||'Meeting',project:m.project||'',meetingDate:m.meeting_date||''})));
+}
+function assistantIsClosed(f){ const s=String(f.status||'Open').toLowerCase(); return !!f.moved_to_monday || s.includes('done') || s.includes('drop') || s.includes('closed'); }
+function assistantOpenItems(){ return assistantAllFollowups().filter(f=>!assistantIsClosed(f)); }
+function assistantDueSoonItems(){ const now=new Date(); now.setHours(0,0,0,0); const soon=new Date(now); soon.setDate(now.getDate()+7); return assistantOpenItems().filter(f=>{ if(!f.due_date) return false; const d=new Date(f.due_date+'T00:00:00'); return d>=now && d<=soon; }); }
+function assistantWaitingItems(){ return assistantOpenItems().filter(f=>String(f.status||'').toLowerCase().includes('wait')); }
+function assistantClosedThisWeek(){ return assistantThisWeekMeetings().flatMap(m=>m.followups||[]).filter(f=>assistantIsClosed(f)).length; }
+function assistantGrowthItems(){ const active=typeof activeGrowthGoals==='function' ? activeGrowthGoals() : []; return active.map(g=>({title:g.name, meta:`Growth · ${g.target_days||g.targetDays||12} target days`, note:'Ask: what did this habit give me?'})); }
+function esc(v){ return typeof escapeHtml==='function' ? escapeHtml(v) : String(v||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function setText(id, value){ const el=document.getElementById(id); if(el) el.textContent=value; }
+function val(id){ return document.getElementById(id)?.value || ''; }
+function setVal(id,v){ const el=document.getElementById(id); if(el) el.value=v; }
+function assistantItemHtml(item, opts={}){
+  const color=opts.color||'var(--orange)';
+  const title=esc(item.text||item.title||'Open item');
+  const meta=esc(item.meta || [item.meeting, item.project, item.due_date?`Due ${item.due_date}`:''].filter(Boolean).join(' · '));
+  return `<div class="loop-item"><div class="dot" style="background:${color}"></div><div class="item-main"><div class="item-title">${title}</div><div class="item-meta">${meta}</div><div class="item-actions"><button class="mini-action done" onclick="assistantMarkDone('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">Done</button><button class="mini-action carry" onclick="assistantMoveToMonday('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">Move to monday</button><button class="mini-action wait" onclick="assistantMarkWaiting('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">Not now</button><button class="mini-action drop" onclick="assistantDropItem('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">No longer needed</button></div></div></div>`;
+}
+function renderAssistantOverview(){
+  if(!document.getElementById('panel-overview')) return;
+  const open=assistantOpenItems(), due=assistantDueSoonItems(), waiting=assistantWaitingItems(), growth=assistantGrowthItems(), closed=assistantClosedThisWeek(), meetings=assistantThisWeekMeetings();
+  const reflect=meetings.filter(m=>{ const r=workParseReflection(m); return r.feeling && r.feeling!=='Clear / settled'; }).length + growth.length;
+  [['assistantOpenCount',open.length],['assistantClosedCount',closed],['assistantReflectCount',reflect],['queueOpenCount',open.length],['queueDueCount',due.length],['queueWaitingCount',waiting.length],['queueGrowthCount',growth.length],['weeklyClosedCount',closed],['weeklyOpenCount',open.length],['weeklyGrowthCount',reflect],['weeklyNextCount',Math.min(open.length+growth.length,4)],['monthlyOpenCount',open.length],['monthlyWeekCount',state.weeklyReviews?.length||0],['monthlyGrowthCount',growth.length],['monthlyImproveCount',reflect]].forEach(([id,v])=>setText(id,v));
+  const focus=document.getElementById('assistantTodayFocus'); if(focus) focus.textContent=open[0]?.text || growth[0]?.title || 'Use today to close one meaningful loop.';
+  const top=document.getElementById('assistantTopItems'); if(top) top.innerHTML=(open.slice(0,2).map(i=>assistantItemHtml(i)).join('') || '<div class="card-sub">No urgent open loops. Keep today light and clear.</div>');
+  const handover=document.getElementById('assistantHandoverList'); if(handover) handover.innerHTML=`<div class="loop-item"><div class="dot" style="background:var(--orange)"></div><div class="item-main"><div class="item-title">${open.length} item${open.length===1?'':'s'} still carried in My OS.</div><div class="item-meta">Review these before switching off.</div></div></div><div class="loop-item"><div class="dot" style="background:var(--green)"></div><div class="item-main"><div class="item-title">${closed} action${closed===1?'':'s'} moved, closed or dropped this week.</div><div class="item-meta">These are no longer mental load.</div></div></div><div class="loop-item"><div class="dot" style="background:var(--purple)"></div><div class="item-main"><div class="item-title">Growth check-in: ${growth.length || 0} active experiment${growth.length===1?'':'s'}.</div><div class="item-meta">Ask what each one gave you, not just the number.</div></div></div>`;
+  renderAssistantQueue(assistantQueueTab); renderWeeklyReview(weeklyReviewTab); renderMonthlyReviewVisibility();
+}
+function switchAssistantQueue(type, btn){ assistantQueueTab=type; document.querySelectorAll('.queue-tab').forEach(t=>t.classList.remove('active')); if(btn) btn.classList.add('active'); renderAssistantQueue(type); }
+function renderAssistantQueue(type='open'){
+  const el=document.getElementById('assistantQueueContent'); if(!el) return;
+  const open=assistantOpenItems(), due=assistantDueSoonItems(), waiting=assistantWaitingItems(), growth=assistantGrowthItems();
+  if(type==='due') el.innerHTML=(due.map(i=>assistantItemHtml(i,{color:'var(--blue)'})).join('') || '<div class="card-sub">Nothing due soon.</div>');
+  else if(type==='waiting') el.innerHTML=(waiting.map(i=>assistantItemHtml(i,{color:'var(--green)'})).join('') || '<div class="card-sub">Nothing waiting right now.</div>');
+  else if(type==='growth') el.innerHTML=(growth.map(g=>`<div class="loop-item"><div class="dot" style="background:var(--purple)"></div><div class="item-main"><div class="item-title">${esc(g.title)}</div><div class="item-meta">${esc(g.meta)}</div><div class="item-actions"><button class="mini-action carry">Continue</button><button class="mini-action wait">Adjust</button><button class="mini-action drop">Pause</button></div></div></div>`).join('') || '<div class="card-sub">No active growth experiments.</div>');
+  else el.innerHTML=(open.map(i=>assistantItemHtml(i)).join('') || '<div class="card-sub">No open loops. Nice.</div>');
+}
+function switchWeekly(type, btn){ weeklyReviewTab=type; document.querySelectorAll('.weekly-tab').forEach(t=>t.classList.remove('active')); if(btn) btn.classList.add('active'); renderWeeklyReview(type); }
+function latestWeeklyValue(key){ const {weekStart}=assistantWeekBounds(); const row=(state.weeklyReviews||[]).find(r=>r.week_start===weekStart); return row?.[key] || ''; }
+function renderWeeklyReview(type='closed'){
+  const el=document.getElementById('weeklyContent'); if(!el) return;
+  const open=assistantOpenItems(), closed=assistantClosedThisWeek(), meetings=assistantThisWeekMeetings();
+  const feelings=meetings.map(m=>workParseReflection(m).feeling).filter(Boolean), improves=meetings.map(m=>workParseReflection(m).improve).filter(Boolean);
+  if(type==='open') el.innerHTML=`<div class="review-columns"><div class="review-box"><h4>Open items to decide</h4><div class="loop-list">${open.map(i=>assistantItemHtml(i)).join('') || '<div class="card-sub">No open items.</div>'}</div></div><div class="review-box"><h4>My decision notes</h4><textarea class="textarea" id="weeklyOpenNotes" placeholder="What should stay open, move to monday.com, be parked, or removed?">${esc(latestWeeklyValue('open_notes'))}</textarea></div></div>`;
+  else if(type==='growth') el.innerHTML=`<div class="review-columns"><div class="review-box"><h4>Mood + improvement patterns</h4><ul>${feelings.slice(0,5).map(f=>`<li>Feeling after meeting: ${esc(f)}</li>`).join('') || '<li>No meeting mood data yet.</li>'}${improves.slice(0,5).map(i=>`<li>${esc(i)}</li>`).join('')}</ul></div><div class="review-box"><h4>My reflection notes</h4><textarea class="textarea" id="weeklyMoodNotes" placeholder="How was my mood this week? What kept showing up? What do I want to improve?">${esc(latestWeeklyValue('mood_notes'))}</textarea><div class="decision-row"><button class="chip active">Continue</button><button class="chip">Adjust</button><button class="chip">Pause</button><button class="chip">Complete</button></div></div></div>`;
+  else if(type==='next') el.innerHTML=`<div class="review-columns"><div class="review-box"><h4>Suggested next week focus</h4><ul>${open.slice(0,4).map(i=>`<li>${esc(i.text||i.title)}</li>`).join('') || '<li>Keep the week light and intentional.</li>'}</ul></div><div class="review-box"><h4>My weekly close-off</h4><textarea class="textarea" id="weeklyNextNotes" placeholder="Write your final weekly review here. This will be summarised in monthly review.">${esc(latestWeeklyValue('next_notes'))}</textarea></div></div>`;
+  else el.innerHTML=`<div class="review-columns"><div class="review-box"><h4>System summary</h4><ul><li>${closed} work action${closed===1?'':'s'} moved, closed or dropped</li><li>${meetings.length} meeting close-off${meetings.length===1?'':'s'} this week</li><li>${open.length} item${open.length===1?'':'s'} still open</li></ul></div><div class="review-box"><h4>My weekly notes</h4><textarea class="textarea" id="weeklyClosedNotes" placeholder="What felt properly closed this week? What gave me relief? What should I acknowledge?">${esc(latestWeeklyValue('closed_notes'))}</textarea></div></div>`;
+}
+function setDailyEnergy(btn){ document.querySelectorAll('.energy-row .chip').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); dailyEnergy=btn.dataset.energy||btn.textContent.trim()||'Medium'; }
+async function saveDailyCloseoff(){ if(!currentUser?.id){ alert('Please log in again.'); return; } const close_date=new Date().toISOString().slice(0,10); const payload={user_id:currentUser.id,close_date,energy:dailyEnergy,still_open:val('dailyStillOpen'),let_go:val('dailyLetGo'),tomorrow_first_move:val('dailyTomorrowMove'),updated_at:new Date().toISOString()}; const {data,error}=await sb.from('daily_closeoffs').upsert(payload,{onConflict:'user_id,close_date'}).select().single(); if(error){ console.error(error); alert('Could not save daily close-off: '+error.message); return; } const idx=state.dailyCloseoffs.findIndex(r=>r.close_date===close_date); if(idx>=0) state.dailyCloseoffs[idx]=data; else state.dailyCloseoffs.unshift(data); showSaved(); renderAssistantOverview(); }
+async function saveWeeklyReview(){ if(!currentUser?.id){ alert('Please log in again.'); return; } const {weekStart}=assistantWeekBounds(); const payload={user_id:currentUser.id,week_start:weekStart,closed_notes:val('weeklyClosedNotes'),open_notes:val('weeklyOpenNotes'),mood_notes:val('weeklyMoodNotes'),next_notes:val('weeklyNextNotes'),summary_json:{open_count:assistantOpenItems().length,closed_count:assistantClosedThisWeek(),meeting_count:assistantThisWeekMeetings().length},updated_at:new Date().toISOString()}; const {data,error}=await sb.from('weekly_reviews').upsert(payload,{onConflict:'user_id,week_start'}).select().single(); if(error){ console.error(error); alert('Could not save weekly review: '+error.message); return; } const idx=state.weeklyReviews.findIndex(r=>r.week_start===weekStart); if(idx>=0) state.weeklyReviews[idx]=data; else state.weeklyReviews.unshift(data); showSaved(); renderAssistantOverview(); }
+async function saveMonthlyReview(){ if(!currentUser?.id){ alert('Please log in again.'); return; } const month_key=monthKey(todayObj.getFullYear(), todayObj.getMonth()); const payload={user_id:currentUser.id,month_key,notes:val('monthlyNotes'),summary_json:{open_count:assistantOpenItems().length,weekly_count:state.weeklyReviews?.length||0,growth_count:assistantGrowthItems().length},updated_at:new Date().toISOString()}; const {data,error}=await sb.from('monthly_reviews').upsert(payload,{onConflict:'user_id,month_key'}).select().single(); if(error){ console.error(error); alert('Could not save monthly review: '+error.message); return; } const idx=state.monthlyReviews.findIndex(r=>r.month_key===month_key); if(idx>=0) state.monthlyReviews[idx]=data; else state.monthlyReviews.unshift(data); showSaved(); renderAssistantOverview(); }
+function renderMonthlyReviewVisibility(){ const card=document.getElementById('monthlyReviewCard'); if(!card) return; const d=todayObj.getDate(); card.style.display=(d>=25 || d<=3) ? 'block' : 'none'; const title=document.getElementById('monthlyReviewTitle'); if(title) title.textContent=`${MONTH_NAMES[todayObj.getMonth()]} review will be ready soon.`; }
+async function assistantUpdateFollowup(meetingId, index, patch){ const m=(state.workMeetings||[]).find(x=>String(x.id)===String(meetingId)); if(!m || index<0 || !m.followups?.[index]) return; m.followups[index]={...m.followups[index],...patch}; const {error}=await sb.from('work_meetings').update({followups:m.followups,updated_at:new Date().toISOString()}).eq('id',meetingId).eq('user_id',currentUser.id); if(error){ console.error(error); alert('Could not update item: '+error.message); return; } renderAssistantOverview(); renderWorkTab(); showSaved(); }
+function assistantMarkDone(id,i){ assistantUpdateFollowup(id,i,{status:'Done'}); }
+function assistantMoveToMonday(id,i){ assistantUpdateFollowup(id,i,{moved_to_monday:true,status:'Done'}); }
+function assistantMarkWaiting(id,i){ assistantUpdateFollowup(id,i,{status:'Waiting'}); }
+function assistantDropItem(id,i){ assistantUpdateFollowup(id,i,{status:'Dropped'}); }
+
+function workParseReflection(m){ if(!m?.note_html) return {}; try{ const obj=JSON.parse(m.note_html); return obj && typeof obj==='object' ? obj : {what_happened:stripHtml(m.note_html||'')}; } catch{ return {what_happened:stripHtml(m.note_html||'')}; } }
+function collectWorkReflection(){ return {what_happened:val('workWhatHappened'),key_takeaway:val('workKeyTakeaway'),feeling:val('workMeetingFeeling'),improve:val('workImproveNext'),remember:val('workRememberPersonally')}; }
+function workSetReflectionFields(m={}){ const r=workParseReflection(m); setVal('workWhatHappened',r.what_happened||''); setVal('workKeyTakeaway',r.key_takeaway||''); setVal('workMeetingFeeling',r.feeling||'Still carrying open loops'); setVal('workImproveNext',r.improve||''); setVal('workRememberPersonally',r.remember||''); }
+workIsActiveFollowupStatus = function(status, f={}){ if(f.moved_to_monday) return false; return ['Open','Waiting','Carry next week'].includes(status || 'Open'); };
+normaliseWorkMeeting = function(m){ return {id:isUuidLike(m.id)?String(m.id):myosUuid(),title:m.title||'Untitled meeting',meeting_date:m.meeting_date||m.date||workSelectedDate,project:m.project||'',people:m.people||'',meeting_type:m.meeting_type||m.type||'Meeting',note_html:m.note_html||'',textboxes:[],followups:Array.isArray(m.followups)?m.followups.map(f=>({text:f.text||'',status:f.status||'Open',due_date:f.due_date||f.date||'',weekday:f.weekday||workWeekdayLabel(f.due_date||f.date||''),moved_to_monday:!!f.moved_to_monday})):[],created_at:m.created_at||new Date().toISOString(),updated_at:m.updated_at||new Date().toISOString()}; };
+renderWorkSummary = function(){ const {monday,sunday}=assistantWeekBounds(); const meetings=(state.workMeetings||[]).filter(m=>{ const dt=new Date((m.meeting_date||'')+'T00:00:00'); return dt>=monday && dt<=sunday; }); const all=meetings.flatMap(m=>m.followups||[]); setText('work-meeting-count',meetings.length); setText('work-monday-count',all.filter(f=>assistantIsClosed(f)).length); setText('work-followup-count',all.filter(f=>!assistantIsClosed(f)).length); };
+renderWorkCalendar = function(){ const el=document.getElementById('work-calendar'); if(!el) return; const label=document.getElementById('work-month-label'); if(label) label.textContent=`${MONTH_NAMES[workViewMonth]} ${workViewYear}`; const first=new Date(workViewYear,workViewMonth,1); const days=new Date(workViewYear,workViewMonth+1,0).getDate(); const start=(first.getDay()+6)%7; let html=['Mo','Tu','We','Th','Fr','Sa','Su'].map(d=>`<div class="work-cal-label">${d}</div>`).join(''); for(let i=0;i<start;i++) html+='<div class="work-day empty"></div>'; for(let d=1;d<=days;d++){ const key=dayKey(workViewYear,workViewMonth,d); const meetings=(state.workMeetings||[]).filter(m=>workMeetingDateKey(m)===key); const pills=meetings.slice(0,2).map(m=>{ const open=(m.followups||[]).some(f=>!assistantIsClosed(f)); return `<span class="work-event-pill ${open?'open':'closed'}">${workMeetingTitle(m)}${open?'':' ✓'}</span>`; }).join('')+(meetings.length>2?`<span class="work-event-pill more">+${meetings.length-2} more</span>`:''); html+=`<div class="work-day ${key===workSelectedDate?'selected':''}" onclick="selectWorkDate('${key}')"><div class="work-day-num">${d}</div>${pills}</div>`; } el.innerHTML=html; };
+openAddWorkMeetingModal = function(dateKey=''){ workEditingMeetingId=''; setText('work-modal-title','Meeting close-off'); setVal('workMeetingId',''); setVal('workMeetingTitle',''); setVal('workMeetingDate',workDateKeyFromInput(dateKey)); setVal('workMeetingProject',''); setVal('workMeetingPeople',''); setVal('workMeetingType','Meeting'); workSetReflectionFields({}); document.getElementById('workFollowRows').innerHTML=''; workAddFollowupRow('', 'Open', '', false); document.getElementById('workMeetingModal').classList.add('open'); setTimeout(()=>document.getElementById('workMeetingTitle')?.focus(),50); };
+openWorkMeeting = function(id){ const m=(state.workMeetings||[]).find(x=>String(x.id)===String(id)); if(!m) return; workEditingMeetingId=String(id); setText('work-modal-title','Edit close-off'); setVal('workMeetingId',m.id); setVal('workMeetingTitle',m.title||''); setVal('workMeetingDate',workMeetingDateKey(m)); setVal('workMeetingProject',m.project||''); setVal('workMeetingPeople',m.people||''); setVal('workMeetingType',m.meeting_type||'Meeting'); workSetReflectionFields(m); document.getElementById('workFollowRows').innerHTML=''; (m.followups?.length?m.followups:[{text:'',status:'Open',due_date:'',moved_to_monday:false}]).forEach(f=>workAddFollowupRow(f.text||'',f.status||'Open',f.due_date||'',!!f.moved_to_monday)); document.getElementById('workMeetingModal').classList.add('open'); };
+workAddFollowupRow = function(text='', status='Open', dueDate='', moved=false){ const wrap=document.getElementById('workFollowRows'); if(!wrap) return; const row=document.createElement('div'); row.className='follow-row'; const weekday=workWeekdayLabel(dueDate); row.innerHTML=`<input class="input work-follow-text" value="${escapeAttr(text)}" placeholder="Action item"><select class="input work-follow-status"><option value="Open" ${status==='Open'?'selected':''}>Open</option><option value="Waiting" ${status==='Waiting'?'selected':''}>Waiting</option><option value="Carry next week" ${status==='Carry next week'?'selected':''}>Carry next week</option><option value="Done" ${status==='Done'?'selected':''}>Done</option><option value="Dropped" ${status==='Dropped'?'selected':''}>Dropped</option></select><input class="input work-follow-date" type="date" value="${escapeAttr(dueDate)}" onchange="workRefreshFollowupWeekday(this)"><div class="work-follow-weekday">${weekday||'No date'}</div><label class="checkbox-card"><input type="checkbox" class="work-follow-monday" ${moved?'checked':''}> Moved to monday.com</label><button class="btn btn-ghost btn-small" onclick="this.closest('.follow-row').remove()">Remove</button>`; wrap.appendChild(row); };
+collectWorkFollowups = function(){ return [...document.querySelectorAll('#workFollowRows .follow-row')].map(r=>{ const dueDate=r.querySelector('.work-follow-date')?.value||''; return {text:r.querySelector('.work-follow-text')?.value.trim()||'',status:r.querySelector('.work-follow-status')?.value||'Open',due_date:dueDate,weekday:workWeekdayLabel(dueDate),moved_to_monday:!!r.querySelector('.work-follow-monday')?.checked}; }).filter(f=>f.text); };
+saveWorkMeeting = async function(){ const title=val('workMeetingTitle').trim(); const date=val('workMeetingDate'); if(!title||!date){ alert('Meeting title and date are required.'); return; } if(!currentUser?.id){ alert('Please log in again before saving.'); return; } const payload={user_id:currentUser.id,title,meeting_date:date,project:val('workMeetingProject').trim(),people:val('workMeetingPeople').trim(),meeting_type:val('workMeetingType')||'Meeting',note_html:JSON.stringify(collectWorkReflection()),textboxes:[],followups:collectWorkFollowups(),updated_at:new Date().toISOString()}; let data,error; if(workEditingMeetingId){ ({data,error}=await sb.from('work_meetings').update(payload).eq('id',String(workEditingMeetingId)).eq('user_id',currentUser.id).select().single()); } else { ({data,error}=await sb.from('work_meetings').insert(payload).select().single()); } if(error){ console.error(error); alert('Could not save meeting close-off: '+error.message); return; } const saved=normaliseWorkMeeting(data||payload); const existing=state.workMeetings.findIndex(m=>String(m.id)===String(saved.id)); if(existing>=0) state.workMeetings[existing]=saved; else state.workMeetings.unshift(saved); workSelectedDate=date; syncWorkViewToDate(date); workEditingMeetingId=''; closeWorkMeetingModal(); renderWorkTab(); renderAssistantOverview(); showSaved(); };
+renderWorkWeeklyReview = function(){ const el=document.getElementById('work-weekly-review'); if(el) el.innerHTML=''; };
+
+renderWorkSelectedDay = function(){
+  const title=document.getElementById('work-selected-title'); if(title) title.textContent=`Selected day — ${workSelectedDate}`;
+  const list=document.getElementById('work-day-meetings'); if(!list) return;
+  const meetings=(state.workMeetings||[]).filter(m=>workMeetingDateKey(m)===workSelectedDate).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
+  if(!meetings.length){ list.innerHTML=`<div class="card-sub">No meeting close-offs for this date.</div><button class="btn btn-ghost btn-small" onclick="openAddWorkMeetingModal('${workSelectedDate}')">＋ Close off meeting for this day</button>`; return; }
+  list.innerHTML=meetings.map(m=>{
+    const open=(m.followups||[]).filter(f=>!assistantIsClosed(f)).length;
+    const moved=(m.followups||[]).filter(f=>assistantIsClosed(f)).length;
+    const r=workParseReflection(m);
+    return `<div class="work-meeting-item"><div class="work-meeting-head"><div><div class="work-meeting-title">${workMeetingTitle(m)}</div><div class="work-meeting-meta">${workMeetingProject(m)}${workMeetingPeople(m)?' · '+workMeetingPeople(m):''}</div></div><span class="work-note-type">${open?'Open':'Closed'}</span></div><div class="card-sub">${moved} moved/closed · ${open} kept in My OS${r.feeling?` · ${esc(r.feeling)}`:''}</div><div class="work-meeting-actions"><button class="btn btn-ghost btn-small" onclick="openWorkMeeting('${m.id}')">Open →</button><button class="btn btn-ghost btn-small" onclick="deleteWorkMeeting('${m.id}')">Delete</button></div></div>`;
+  }).join('');
+};
