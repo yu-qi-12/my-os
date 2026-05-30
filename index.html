@@ -67,96 +67,17 @@
 
 <!-- OVERVIEW -->
 <div class="panel active" id="panel-overview">
-  <div class="grid-3">
-    <div class="card overview-score">
-      <div class="card-label">Goals this week</div>
-      <div class="card-value" id="ov-goals" style="color:var(--green)">0<span style="font-size:18px;color:var(--muted)">/0</span></div>
-      <div>
-        <div class="streak-bar" id="ov-goal-bar"><div class="streak-seg"></div></div>
-        <div class="card-sub" style="margin-top:6px">completed</div>
-      </div>
+  <div class="overview-shell">
+    <section class="assistant-hero"><div class="hero-row"><div><div class="card-label">Assistant home</div><h2>What needs your attention?</h2><p>Overview shows only what needs a decision, what can be closed, and what tomorrow-you needs to know. The detailed work stays in Finance, Growth and Work.</p></div></div></section>
+    <div class="top-grid">
+      <div class="card attention-card"><div class="card-label">Today’s focus</div><div class="today-focus" id="assistantTodayFocus">Clear the most important open loops first.</div><p class="card-sub">The assistant uses your close-offs and open loops to suggest a starting point.</p><div class="subtle-divider"></div><div class="loop-list" id="assistantTopItems"></div></div>
+      <div class="card"><div class="card-label">Snapshot</div><div class="snapshot-grid"><div class="snapshot"><div class="snapshot-num" id="assistantOpenCount" style="color:var(--orange)">0</div><div class="snapshot-label">Open loops</div></div><div class="snapshot"><div class="snapshot-num" id="assistantClosedCount" style="color:var(--green)">0</div><div class="snapshot-label">Closed this week</div></div><div class="snapshot"><div class="snapshot-num" id="assistantReflectCount" style="color:var(--purple)">0</div><div class="snapshot-label">Need reflection</div></div></div><div class="source-note"><strong>Rule:</strong> monday.com remains the task system. My OS only keeps personal loops, context and handover.</div></div>
     </div>
-    <div class="card overview-score">
-      <div class="card-label">Workouts this month</div>
-      <div class="card-value" id="ov-workouts" style="color:var(--blue)">0</div>
-      <div class="card-sub" id="ov-workout-sub">sessions logged</div>
-    </div>
-    <div class="card overview-score">
-      <div class="card-label">Net balance</div>
-      <div class="card-value" id="ov-balance" style="color:var(--orange)">$0</div>
-      <div class="card-sub">this month</div>
-    </div>
-  </div>
-  <div class="grid-2">
-    <div class="card">
-      <div class="card-label">Growth focus</div>
-      <div id="ov-growth-focus" style="font-size:13px;color:var(--muted);font-style:italic;">No growth goals yet</div>
-    </div>
-    <div class="card">
-      <div class="card-label">Growth this month</div>
-      <div id="ov-growth-month" style="font-size:13px;color:var(--muted);font-style:italic;">No days tracked yet</div>
-    </div>
-  </div>
-  <div class="section-title" style="margin-top:8px;">📊 Fitness Reports</div>
-  <div class="report-tabs">
-    <button class="report-tab active" onclick="switchReport('monthly')">Monthly</button>
-    <button class="report-tab" onclick="switchReport('quarterly')">Quarterly</button>
-    <button class="report-tab" onclick="switchReport('yearly')">Yearly</button>
-  </div>
-  <div id="report-monthly"></div>
-  <div id="report-quarterly" style="display:none"></div>
-  <div id="report-yearly" style="display:none"></div>
-</div>
-
-<!-- GOALS -->
-<div class="panel" id="panel-goals">
-  <div class="section-title">Weekly Goals</div>
-  <ul class="goal-list" id="goalList"></ul>
-  <div class="add-row">
-    <input class="add-input" id="goalInput" placeholder="Add a goal…" onkeydown="if(event.key==='Enter') addGoal()">
-    <select id="goalCat">
-      <option value="life">🌱 Life</option>
-      <option value="fitness">💪 Fitness</option>
-      <option value="finance">💰 Finance</option>
-      <option value="growth">📚 Growth</option>
-      <option value="career">💼 Career</option>
-    </select>
-    <button class="add-btn" onclick="addGoal()">+ Add</button>
-  </div>
-</div>
-
-<!-- FITNESS -->
-<div class="panel" id="panel-fitness">
-  <div class="grid-2">
-    <div class="card">
-      <div class="card-label">This month</div>
-      <div class="big-number" style="color:var(--blue)" id="fit-count">0</div>
-      <div class="card-sub" style="margin-top:4px">workouts logged</div>
-      <div class="goal-setter" style="margin-top:16px;">
-        <label>Monthly goal:</label>
-        <input type="number" id="fitGoalInput" min="1" max="60" placeholder="e.g. 12">
-        <button class="add-btn" onclick="setFitGoal()">Set</button>
-        <span id="fitGoalDisplay" style="font-size:12px;color:var(--muted);"></span>
-      </div>
-      <div class="add-row" style="margin-top:4px">
-        <input class="add-input" id="workoutInput" placeholder="e.g. 30min run, chest day…">
-        <button class="add-btn" onclick="logWorkout()">Log</button>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-label">Activity calendar</div>
-      <div class="cal-header">
-        <button class="cal-nav" onclick="calPrev()">‹</button>
-        <span class="cal-month-label" id="calMonthLabel"></span>
-        <button class="cal-nav" onclick="calNext()">›</button>
-      </div>
-      <div class="cal-dow"><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span></div>
-      <div class="cal-grid" id="calGrid"></div>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-label">Recent sessions</div>
-    <div id="workoutLog"><div style="color:var(--muted);font-size:13px;padding:8px 0;">No workouts logged yet.</div></div>
+    <div class="card"><div class="section-heading"><div><div class="card-label">Review inbox</div><h3>Items waiting for a decision</h3></div><p>Each item should end as: close, move to monday.com, not now, or no longer needed.</p></div><div class="queue-layout"><div class="queue-tabs"><button class="queue-tab active" onclick="switchAssistantQueue('open',this)"><div class="queue-tab-top"><h4>Open loops</h4><span class="queue-count" id="queueOpenCount" style="background:var(--soft-orange);color:var(--orange)">0</span></div><p>Still carried in My OS.</p></button><button class="queue-tab" onclick="switchAssistantQueue('due',this)"><div class="queue-tab-top"><h4>Due soon</h4><span class="queue-count" id="queueDueCount" style="background:var(--soft-blue);color:var(--blue)">0</span></div><p>Needs attention this week.</p></button><button class="queue-tab" onclick="switchAssistantQueue('waiting',this)"><div class="queue-tab-top"><h4>Waiting</h4><span class="queue-count" id="queueWaitingCount" style="background:var(--soft-green);color:var(--green)">0</span></div><p>Not yours right now.</p></button><button class="queue-tab" onclick="switchAssistantQueue('growth',this)"><div class="queue-tab-top"><h4>Growth</h4><span class="queue-count" id="queueGrowthCount" style="background:var(--soft-purple);color:var(--purple)">0</span></div><p>Needs meaning or decision.</p></button></div><div id="assistantQueueContent"></div></div></div>
+    <div class="closeoff-grid"><div class="card"><div class="section-heading"><div><div class="card-label">Daily close-off</div><h3>Tonight’s handover</h3></div><button class="btn btn-primary btn-small" onclick="saveDailyCloseoff()">✓ Save</button></div><div class="field"><label>What is still open?</label><textarea class="textarea" id="dailyStillOpen" placeholder="What is still in your head?"></textarea></div><div class="field"><label>What can I let go of?</label><textarea class="textarea" id="dailyLetGo" placeholder="What can be released because it is done, moved or not needed?"></textarea></div><div class="field"><label>Tomorrow’s first move</label><textarea class="textarea" id="dailyTomorrowMove" placeholder="What is the first useful thing tomorrow?"></textarea></div><div class="energy-row"><button class="chip" data-energy="Low" onclick="setDailyEnergy(this)">Low</button><button class="chip active" data-energy="Medium" onclick="setDailyEnergy(this)">Medium</button><button class="chip" data-energy="Good" onclick="setDailyEnergy(this)">Good</button></div></div><div class="card"><div class="section-heading"><div><div class="card-label">Assistant handover</div><h3>Tomorrow-you should know</h3></div></div><div class="loop-list" id="assistantHandoverList"></div></div></div>
+    <div class="card"><div class="section-heading"><div><div class="card-label">Review rhythm</div><h3>Simple by design</h3></div><p>Each level only does one job.</p></div><div class="review-rhythm"><div class="rhythm-step"><h4>Daily</h4><p>Clear today’s mental load and create tomorrow’s handover.</p></div><div class="rhythm-step"><h4>Weekly</h4><p>Decide what is closed, open, moved, paused or no longer needed.</p></div><div class="rhythm-step"><h4>Monthly</h4><p>Summarise weekly reviews, growth experiments and patterns to choose the next pivot.</p></div></div></div>
+    <div class="card weekly-card"><div class="section-heading"><div><div class="card-label">Weekly close-off</div><h3>Personal + work review</h3><p class="card-sub">Use daily close-offs, meeting close-offs, growth experiments and finance check-ins to write one clean weekly review.</p></div><button class="btn btn-primary" onclick="saveWeeklyReview()">✓ Save weekly review</button></div><div class="weekly-tabs"><button class="weekly-tab active" onclick="switchWeekly('closed',this)"><div class="count" id="weeklyClosedCount" style="color:var(--green)">0</div><h4>Closed</h4><p>Completed, moved or resolved.</p></button><button class="weekly-tab" onclick="switchWeekly('open',this)"><div class="count" id="weeklyOpenCount" style="color:var(--orange)">0</div><h4>Open / decide</h4><p>Close, not now, move to monday, or remove.</p></button><button class="weekly-tab" onclick="switchWeekly('growth',this)"><div class="count" id="weeklyGrowthCount" style="color:var(--purple)">0</div><h4>Mood + improve</h4><p>Patterns, feelings and improvements.</p></button><button class="weekly-tab" onclick="switchWeekly('next',this)"><div class="count" id="weeklyNextCount" style="color:var(--blue)">0</div><h4>Next week</h4><p>Focus and pivot.</p></button></div><div class="weekly-content" id="weeklyContent"></div></div>
+    <div class="card monthly-card" id="monthlyReviewCard" style="display:none;"><div class="section-heading"><div><div class="card-label">Monthly review</div><h3>Only appears near month-end</h3><p class="card-sub">Shown from the 25th to the 3rd. The assistant summarises daily close-offs, weekly reviews, meeting close-offs, growth experiments and remaining open loops.</p></div><button class="btn btn-ghost" onclick="saveMonthlyReview()">✓ Save monthly review</button></div><div class="monthly-banner"><div><strong id="monthlyReviewTitle">Monthly review is ready.</strong><p class="card-sub" style="margin-top:5px" id="monthlyReviewSub">Review before moving into next month.</p></div><span class="pill" style="background:var(--soft-orange);color:var(--orange)">Shows 25th–3rd</span></div><div class="monthly-summary-grid"><div class="monthly-mini"><strong id="monthlyOpenCount" style="color:var(--orange)">0</strong><span class="snapshot-label">Open items</span></div><div class="monthly-mini"><strong id="monthlyWeekCount" style="color:var(--green)">0</strong><span class="snapshot-label">Weekly summaries</span></div><div class="monthly-mini"><strong id="monthlyGrowthCount" style="color:var(--purple)">0</strong><span class="snapshot-label">Growth decisions</span></div><div class="monthly-mini"><strong id="monthlyImproveCount" style="color:var(--blue)">0</strong><span class="snapshot-label">Areas to improve</span></div></div><div class="field" style="margin-top:12px;"><label>My monthly notes</label><textarea class="textarea" id="monthlyNotes" placeholder="What should I continue, adjust, pause or complete next month?"></textarea></div></div>
   </div>
 </div>
 
@@ -396,6 +317,43 @@
       <button class="growth-btn growth-btn-primary" onclick="openAddGrowthModal()">+ Add new habit</button>
     </div>
 
+    <div class="growth-section-label">Fitness experiment</div>
+    <div class="growth-fitness-card">
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-label">This month</div>
+      <div class="big-number" style="color:var(--blue)" id="fit-count">0</div>
+      <div class="card-sub" style="margin-top:4px">workouts logged</div>
+      <div class="goal-setter" style="margin-top:16px;">
+        <label>Monthly goal:</label>
+        <input type="number" id="fitGoalInput" min="1" max="60" placeholder="e.g. 12">
+        <button class="add-btn" onclick="setFitGoal()">Set</button>
+        <span id="fitGoalDisplay" style="font-size:12px;color:var(--muted);"></span>
+      </div>
+      <div class="add-row" style="margin-top:4px">
+        <input class="add-input" id="workoutInput" placeholder="e.g. 30min run, chest day…">
+        <button class="add-btn" onclick="logWorkout()">Log</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-label">Activity calendar</div>
+      <div class="cal-header">
+        <button class="cal-nav" onclick="calPrev()">‹</button>
+        <span class="cal-month-label" id="calMonthLabel"></span>
+        <button class="cal-nav" onclick="calNext()">›</button>
+      </div>
+      <div class="cal-dow"><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span></div>
+      <div class="cal-grid" id="calGrid"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-label">Recent sessions</div>
+    <div id="workoutLog"><div style="color:var(--muted);font-size:13px;padding:8px 0;">No workouts logged yet.</div></div>
+  </div>
+
+    </div>
+
     <div class="grid-3 growth-summary-grid">
       <div class="card"><div class="card-label">Active habits</div><div class="card-value" id="growth-active-count" style="color:var(--blue)">0</div><div class="card-sub">currently tracking</div></div>
       <div class="card"><div class="card-label">Tracked this month</div><div class="card-value" id="growth-month-days" style="color:var(--purple)">0</div><div class="card-sub">unique days completed</div></div>
@@ -473,74 +431,19 @@
 
 <!-- WORK -->
 <div class="panel" id="panel-work">
-  <div class="work-topbar">
-    <div>
-      <div class="card-label" style="margin-bottom:6px">Work</div>
-      <h2>Monthly meeting log</h2>
-      <p>Capture meetings by date, use Scribble/Text notes, highlight key points, add movable text boxes, and review follow-ups weekly.</p>
-    </div>
-    <button class="btn btn-primary" onclick="openAddWorkMeetingModal()">＋ Log meeting</button>
-  </div>
-
-  <div class="grid-3 work-summary-grid">
-    <div class="card"><div class="card-label">Meetings this month</div><div class="card-value" id="work-meeting-count" style="color:var(--blue)">0</div><div class="card-sub">logged this month</div></div>
-    <div class="card"><div class="card-label">Open follow-ups</div><div class="card-value" id="work-followup-count" style="color:var(--orange)">0</div><div class="card-sub">need review</div></div>
-    <div class="card"><div class="card-label">Notes captured</div><div class="card-value" id="work-note-count" style="color:var(--purple)">0</div><div class="card-sub">meeting notes saved</div></div>
-  </div>
-
-  <div class="grid-2 work-main-grid">
-    <div class="card">
-      <div class="work-cal-head">
-        <button class="btn btn-ghost btn-small" onclick="workPrevMonth()">‹</button>
-        <div class="card-label" id="work-month-label" style="margin-bottom:0">Month</div>
-        <button class="btn btn-ghost btn-small" onclick="workNextMonth()">›</button>
-      </div>
-      <div class="work-calendar" id="work-calendar"></div>
-    </div>
-    <div class="card">
-      <div class="card-label" id="work-selected-title">Selected day</div>
-      <div class="side-list" id="work-day-meetings"></div>
-    </div>
-  </div>
-
-  <div class="card weekly-review work-weekly-card">
-    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
-      <div><div class="card-label" style="margin-bottom:6px">Weekly reflection</div><h3 style="font-size:18px;margin-bottom:4px">This week</h3><p class="card-sub">Review meetings and carry the right things into next week.</p></div>
-      <button class="btn btn-primary" onclick="renderWorkWeeklyReview(true)">Start review →</button>
-    </div>
-    <div class="review-grid" id="work-weekly-review"></div>
-  </div>
-
-  <div class="work-modal-overlay" id="workMeetingModal">
-    <div class="work-meeting-modal">
-      <div class="modal-head">
-        <div><h3 id="work-modal-title">Add meeting</h3><div class="card-sub">Fast meeting capture: details, note, follow-ups, save.</div></div>
-        <button class="btn btn-ghost btn-small" onclick="closeWorkMeetingModal()">✕ Close</button>
-      </div>
-      <input type="hidden" id="workMeetingId">
-      <div class="modal-grid">
-        <div class="form-row"><label class="form-label">Meeting title</label><input class="input" id="workMeetingTitle" placeholder="e.g. Marketing WIP"></div>
-        <div class="form-row"><label class="form-label">Date</label><input class="input" id="workMeetingDate" type="date"></div>
-        <div class="form-row"><label class="form-label">Project / topic</label><input class="input" id="workMeetingProject" placeholder="e.g. Delta Connect"></div>
-        <div class="form-row"><label class="form-label">People</label><input class="input" id="workMeetingPeople" placeholder="e.g. Melissa, agency"></div>
-      </div>
-      <div class="form-row"><label class="form-label">Meeting type</label><select class="input" id="workMeetingType"><option>Meeting</option><option>Brainstorm</option><option>Internal check-in</option><option>External call</option><option>Personal work note</option></select></div>
-      <div class="meeting-note-workspace">
-        <div class="note-workspace-head">
-          <div class="note-workspace-title">Meeting note</div>
-          <div class="note-tools"><span class="page-pill">Scribble / Text</span><button class="tool-btn highlight" onclick="workHighlightSelection()">Highlight</button><button class="tool-btn" onclick="workAddTextbox()">+ Text box</button><button class="tool-btn" onclick="workRemoveHighlight()">Remove highlight</button></div>
-        </div>
-        <div class="paper-area" id="workPaperArea">
-          <div id="workNoteEditor" class="note-editor" contenteditable="true" data-placeholder="Use keyboard or Apple Pencil Scribble here..."></div>
-        </div>
-        <div class="scribble-hint">Use Scribble/Text for the main note. Select text to highlight. Use + Text box for movable side notes during the conversation.</div>
-      </div>
-      <div class="follow-section"><div class="form-label">Follow-ups</div><div id="workFollowRows"></div><button class="btn btn-ghost btn-small" onclick="workAddFollowupRow()">+ Add follow-up</button></div>
-      <div class="modal-actions"><div class="save-note">Open follow-ups will appear in weekly reflection.</div><div style="display:flex;gap:8px"><button class="btn btn-ghost" onclick="closeWorkMeetingModal()">Cancel</button><button class="btn btn-primary" onclick="saveWorkMeeting()">✓ Save meeting</button></div></div>
-    </div>
-  </div>
+  <div class="work-topbar"><div><div class="card-label" style="margin-bottom:6px">Work</div><h2>Meeting close-off</h2><p>Reflect after meetings, move real tasks to monday.com, and keep only personal open loops in My OS so you can rest without carrying work mentally.</p></div><button class="btn btn-primary" onclick="openAddWorkMeetingModal()">＋ Meeting close-off</button></div>
+  <div class="grid-3 work-summary-grid"><div class="card"><div class="card-label">Meetings this week</div><div class="card-value" id="work-meeting-count" style="color:var(--blue)">0</div><div class="card-sub">closed or waiting</div></div><div class="card"><div class="card-label">Moved to monday.com</div><div class="card-value" id="work-monday-count" style="color:var(--green)">0</div><div class="card-sub">no longer mental load</div></div><div class="card"><div class="card-label">Personal open loops</div><div class="card-value" id="work-followup-count" style="color:var(--orange)">0</div><div class="card-sub">kept in My OS</div></div></div>
+  <div class="grid-2 work-main-grid"><div class="card"><div class="work-cal-head"><button class="btn btn-ghost btn-small" onclick="workPrevMonth()">‹</button><div class="card-label" id="work-month-label" style="margin-bottom:0">Month</div><button class="btn btn-ghost btn-small" onclick="workNextMonth()">›</button></div><div class="work-calendar" id="work-calendar"></div></div><div class="card"><div class="card-label" id="work-selected-title">Selected day</div><div class="side-list" id="work-day-meetings"></div></div></div>
+  <div class="work-modal-overlay" id="workMeetingModal"><div class="work-meeting-modal"><div class="modal-head"><div><h3 id="work-modal-title">Meeting close-off</h3><div class="card-sub">Notes are optional. The goal is to close loops and decide what should leave your head.</div></div><button class="btn btn-ghost btn-small" onclick="closeWorkMeetingModal()">✕ Close</button></div><input type="hidden" id="workMeetingId"><div class="modal-grid"><div class="form-row"><label class="form-label">Meeting title</label><input class="input" id="workMeetingTitle" placeholder="e.g. Marketing WIP"></div><div class="form-row"><label class="form-label">Date</label><input class="input" id="workMeetingDate" type="date"></div><div class="form-row"><label class="form-label">Project / topic</label><input class="input" id="workMeetingProject" placeholder="e.g. Delta Connect"></div><div class="form-row"><label class="form-label">People</label><input class="input" id="workMeetingPeople" placeholder="e.g. Melissa, agency"></div></div><div class="form-row"><label class="form-label">Meeting type</label><select class="input" id="workMeetingType"><option>Meeting</option><option>Brainstorm</option><option>Internal check-in</option><option>External call</option><option>Personal work note</option></select></div>
+    <div class="meeting-closeoff-card"><div class="section-title">Quick reflection</div><div class="modal-grid"><div class="form-row"><label class="form-label">What happened?</label><textarea class="textarea" id="workWhatHappened" placeholder="Short recap only..."></textarea></div><div class="form-row"><label class="form-label">Key decision / takeaway</label><textarea class="textarea" id="workKeyTakeaway" placeholder="What was decided or clarified?"></textarea></div><div class="form-row"><label class="form-label">How did I feel after this meeting?</label><select class="input" id="workMeetingFeeling"><option>Clear / settled</option><option>Still carrying open loops</option><option>Overloaded</option><option>Frustrated</option><option>Energised</option></select></div><div class="form-row"><label class="form-label">Area to improve next time</label><textarea class="textarea" id="workImproveNext" placeholder="e.g. clarify owner before the meeting ends"></textarea></div></div><div class="form-row"><label class="form-label">Anything I need to remember personally?</label><textarea class="textarea" id="workRememberPersonally" placeholder="Personal context, concerns, decisions, or mental notes..."></textarea></div><div id="workNoteEditor" style="display:none"></div><div id="workPaperArea" style="display:none"></div></div>
+    <div class="follow-section"><div class="form-label">Action items</div><div id="workFollowRows"></div><button class="btn btn-ghost btn-small" onclick="workAddFollowupRow()">＋ Add action item</button></div><div class="assistant-note"><strong>Assistant logic:</strong> items marked “Moved to monday.com” are treated as closed in My OS. Items kept in My OS remain visible in Overview, Daily Close-Off and Weekly Close-Off.</div><div class="modal-actions"><div class="save-note">Meeting close-offs and feelings will appear in daily/weekly review.</div><div style="display:flex;gap:8px"><button class="btn btn-ghost" onclick="closeWorkMeetingModal()">Cancel</button><button class="btn btn-primary" onclick="saveWorkMeeting()">✓ Save close-off</button></div></div></div></div>
 </div>
 
+
+<div style="display:none" aria-hidden="true">
+  <ul id="goalList"></ul><div id="ov-goals"></div><div id="ov-goal-bar"></div><div id="ov-workouts"></div><div id="ov-workout-sub"></div><div id="ov-balance"></div><div id="ov-growth-focus"></div><div id="ov-growth-month"></div>
+  <div id="report-monthly"></div><div id="report-quarterly"></div><div id="report-yearly"></div>
+</div>
 </div><!-- end #app -->
 
 <script src="app.js"></script>
