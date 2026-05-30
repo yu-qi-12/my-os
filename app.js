@@ -470,9 +470,7 @@ function guessType(description){
 }
 
 function parseCSV(text){
-  const lines = text.split(/
-?
-/).filter(l=>l.trim());
+  const lines = text.split(/\r?\n/).filter(l=>l.trim());
   if(lines.length < 2) return [];
   
   // Detect delimiter
@@ -655,7 +653,7 @@ function highlightSearchText(text, term){
   const safe = escapeHTML(text);
   const q = String(term||'').trim();
   if(!q) return safe;
-  const escaped = q.replace(/[.*+?^${}()|[\]\]/g, '\$&');
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   try {
     return safe.replace(new RegExp(escaped, 'gi'), match => `<mark class="search-highlight">${match}</mark>`);
   } catch(e){ return safe; }
@@ -706,9 +704,7 @@ async function quickAddUploadCategory(rowId){
   const typeRaw=prompt('Category type: expense, income, or asset', 'expense');
   const type=['expense','income','asset'].includes(String(typeRaw||'').toLowerCase()) ? String(typeRaw).toLowerCase() : 'expense';
   const warning=categorySimilarityWarning(name);
-  if(warning && !confirm(warning.replace(/^⚠️\s*/, '')+'
-
-Continue adding this category?')) return;
+  if(warning && !confirm(warning.replace(/^⚠️\s*/, '')+'\n\nContinue adding this category?')) return;
   restoreCategory(name);
   if(!state.categories.includes(name)) state.categories.push(name);
   setCategoryType(name,type);
@@ -1950,8 +1946,8 @@ function getMerchantKey(description){
   return String(description||'')
     .toLowerCase()
     .replace(/paypal \*/g,'paypal ')
-    .replace(/(pos|eftpos|visa|mastercard|card|purchase|debit|credit|direct debit|payment)/g,' ')
-    .replace(/(au|aus|australia|sydney|melbourne|brisbane|nsw|vic|qld|pty|ltd)/g,' ')
+    .replace(/\b(pos|eftpos|visa|mastercard|card|purchase|debit|credit|direct debit|payment)\b/g,' ')
+    .replace(/\b(au|aus|australia|sydney|melbourne|brisbane|nsw|vic|qld|pty|ltd)\b/g,' ')
     .replace(/[0-9]+/g,' ')
     .replace(/[^a-z& ]/g,' ')
     .replace(/\s+/g,' ')
@@ -2135,9 +2131,7 @@ async function addCategory(){
   if(!name) return;
 
   const warning=categorySimilarityWarning(name);
-  if(warning && !confirm(warning.replace(/^⚠️\s*/, '')+'
-
-Continue adding this category?')) return;
+  if(warning && !confirm(warning.replace(/^⚠️\s*/, '')+'\n\nContinue adding this category?')) return;
 
   restoreCategory(name);
   if(!state.categories.includes(name)) state.categories.push(name);
@@ -3373,6 +3367,7 @@ boot = async function(){
   renderGrowthTrackers();
   updateOverview();
 };
+boot();
 
 
 // ─── WORK TAB: MEETING LOG ───
@@ -3877,36 +3872,53 @@ async function saveDailyCloseoff(){
   const btn=document.querySelector('[onclick="saveDailyCloseoff()"]');
   if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
   const close_date=new Date().toISOString().slice(0,10);
+  // Capture values before any re-render
   const payload={user_id:currentUser.id,close_date,energy:dailyEnergy,still_open:val('dailyStillOpen'),let_go:val('dailyLetGo'),tomorrow_first_move:val('dailyTomorrowMove'),updated_at:new Date().toISOString()};
   try{
     const data=await assistantSaveByKey('daily_closeoffs','close_date',payload);
     const idx=state.dailyCloseoffs.findIndex(r=>r.close_date===close_date);
     if(idx>=0) state.dailyCloseoffs[idx]=data; else state.dailyCloseoffs.unshift(data);
-    showSaved(); renderAssistantOverview();
+    showSaved();
+    if(btn){ btn.textContent='✓ Saved!'; setTimeout(()=>{ btn.textContent='✓ Save'; },2000); }
   }catch(error){ console.error(error); alert('Could not save daily close-off: '+(error.message||error)); }
-  finally{ if(btn){ btn.disabled=false; btn.textContent='✓ Save'; } }
+  finally{ if(btn){ btn.disabled=false; } }
 }
 async function saveWeeklyReview(){
   if(!currentUser?.id){ alert('Please log in again.'); return; }
+  const btn=document.querySelector('[onclick="saveWeeklyReview()"]');
+  if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
   const {weekStart}=assistantWeekBounds();
-  const payload={user_id:currentUser.id,week_start:weekStart,closed_notes:val('weeklyClosedNotes'),open_notes:val('weeklyOpenNotes'),mood_notes:val('weeklyMoodNotes'),next_notes:val('weeklyNextNotes'),summary_json:{open_count:assistantOpenItems().length,closed_count:assistantClosedThisWeek(),meeting_count:assistantThisWeekMeetings().length},updated_at:new Date().toISOString()};
+  // Capture values BEFORE any re-render
+  const closed_notes=val('weeklyClosedNotes');
+  const open_notes=val('weeklyOpenNotes');
+  const mood_notes=val('weeklyMoodNotes');
+  const next_notes=val('weeklyNextNotes');
+  const payload={user_id:currentUser.id,week_start:weekStart,closed_notes,open_notes,mood_notes,next_notes,summary_json:{open_count:assistantOpenItems().length,closed_count:assistantClosedThisWeek(),meeting_count:assistantThisWeekMeetings().length},updated_at:new Date().toISOString()};
   try{
     const data=await assistantSaveByKey('weekly_reviews','week_start',payload);
     const idx=state.weeklyReviews.findIndex(r=>r.week_start===weekStart);
     if(idx>=0) state.weeklyReviews[idx]=data; else state.weeklyReviews.unshift(data);
-    showSaved(); renderAssistantOverview();
+    showSaved();
+    if(btn){ btn.textContent='✓ Saved!'; setTimeout(()=>{ btn.textContent='✓ Save weekly review'; btn.disabled=false; },2000); return; }
   }catch(error){ console.error(error); alert('Could not save weekly review: '+(error.message||error)); }
+  finally{ if(btn){ btn.disabled=false; } }
 }
 async function saveMonthlyReview(){
   if(!currentUser?.id){ alert('Please log in again.'); return; }
+  const btn=document.querySelector('[onclick="saveMonthlyReview()"]');
+  if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
   const month_key=monthKey(todayObj.getFullYear(), todayObj.getMonth());
-  const payload={user_id:currentUser.id,month_key,notes:val('monthlyNotes'),summary_json:{open_count:assistantOpenItems().length,weekly_count:state.weeklyReviews?.length||0,growth_count:assistantGrowthItems().length},updated_at:new Date().toISOString()};
+  // Capture value BEFORE any re-render
+  const notes=val('monthlyNotes');
+  const payload={user_id:currentUser.id,month_key,notes,summary_json:{open_count:assistantOpenItems().length,weekly_count:state.weeklyReviews?.length||0,growth_count:assistantGrowthItems().length},updated_at:new Date().toISOString()};
   try{
     const data=await assistantSaveByKey('monthly_reviews','month_key',payload);
     const idx=state.monthlyReviews.findIndex(r=>r.month_key===month_key);
     if(idx>=0) state.monthlyReviews[idx]=data; else state.monthlyReviews.unshift(data);
-    showSaved(); renderAssistantOverview();
+    showSaved();
+    if(btn){ btn.textContent='✓ Saved!'; setTimeout(()=>{ btn.textContent='✓ Save monthly review'; btn.disabled=false; },2000); return; }
   }catch(error){ console.error(error); alert('Could not save monthly review: '+(error.message||error)); }
+  finally{ if(btn){ btn.disabled=false; } }
 }
 
 function assistantSetGrowthDecision(btn, decision){
@@ -3961,5 +3973,3 @@ renderWorkSelectedDay = function(){
     return `<div class="work-meeting-item"><div class="work-meeting-head"><div><div class="work-meeting-title">${workMeetingTitle(m)}</div><div class="work-meeting-meta">${workMeetingProject(m)}${workMeetingPeople(m)?' · '+workMeetingPeople(m):''}</div></div><span class="work-note-type">${open?'Open':'Closed'}</span></div><div class="card-sub">${moved} moved/closed · ${open} kept in My OS${r.feeling?` · ${esc(r.feeling)}`:''}</div><div class="work-meeting-actions"><button class="btn btn-ghost btn-small" onclick="openWorkMeeting('${m.id}')">Open →</button><button class="btn btn-ghost btn-small" onclick="deleteWorkMeeting('${m.id}')">Delete</button></div></div>`;
   }).join('');
 };
-
-boot();
