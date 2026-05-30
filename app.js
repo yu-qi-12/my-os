@@ -3367,7 +3367,7 @@ boot = async function(){
   renderGrowthTrackers();
   updateOverview();
 };
-boot();
+
 
 
 // ─── WORK TAB: MEETING LOG ───
@@ -3744,233 +3744,478 @@ async function workUpdateFollowupStatus(meetingId,index,status){
   renderWorkSummary(); renderWorkCalendar(); renderWorkSelectedDay(); renderWorkWeeklyReview('followups'); showSaved();
 }
 
-// ─── ASSISTANT OVERVIEW + CLOSE-OFF SYSTEM OVERRIDES ───
-state.dailyCloseoffs = state.dailyCloseoffs || [];
-state.weeklyReviews = state.weeklyReviews || [];
-state.monthlyReviews = state.monthlyReviews || [];
-let assistantQueueTab = 'open';
-let weeklyReviewTab = 'closed';
-let dailyEnergy = 'Medium';
 
-const __assistantOrigLoadAppData = loadAppData;
+// ─── ASSISTANT OVERVIEW + CLOSE-OFF SYSTEM ───
+state.dailyCloseoffs = state.dailyCloseoffs || [];
+state.weeklyReviews  = state.weeklyReviews  || [];
+state.monthlyReviews = state.monthlyReviews || [];
+
+let assistantQueueTab = 'open';
+let dailyEnergy = 'Medium';
+let logTab = 'daily';
+let logCalYear  = todayObj.getFullYear();
+let logCalMonth = todayObj.getMonth();
+let logSelectedDate = dayKey(todayObj.getFullYear(), todayObj.getMonth(), todayObj.getDate());
+
+// ── Override loadAppData to also load review data ──
+const __assistOrigLoad = loadAppData;
 loadAppData = async function(){
-  await __assistantOrigLoadAppData();
+  await __assistOrigLoad();
   await loadReviewData();
   renderAssistantOverview();
 };
 
+// ── Override switchTab ──
 switchTab = function(name){
-  const tabs=['overview','goals','finance','growth','work'];
-  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',tabs[i]===name));
-  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  const panel=document.getElementById('panel-'+name);
+  const tabs = ['overview','goals','finance','growth','work'];
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', tabs[i] === name));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('panel-' + name);
   if(panel) panel.classList.add('active');
-  if(name==='overview'){ updateOverview(); renderAssistantOverview(); }
-  if(name==='goals'){ renderGoals?.(); updateOverview?.(); }
-  if(name==='finance'){ renderTotalCover(); switchFinTab(finTab); }
-  if(name==='growth'){ renderGrowthTrackers?.(); buildCalendar?.(); updateFitGoalDisplay?.(); renderWorkouts?.(); }
-  if(name==='work'){ renderWorkTab(); }
+  if(name === 'overview'){ renderAssistantOverview(); }
+  if(name === 'goals'){ renderGoals?.(); }
+  if(name === 'finance'){ renderTotalCover(); switchFinTab(finTab); }
+  if(name === 'growth'){ renderGrowthTrackers?.(); buildCalendar?.(); updateFitGoalDisplay?.(); renderWorkouts?.(); }
+  if(name === 'work'){ renderWorkTab(); }
 };
-
-async function loadReviewData(){
-  if(!currentUser?.id) return;
-  const safeFetch = async (table, orderCol='created_at') => {
-    try{
-      const {data,error}=await sb.from(table).select('*').order(orderCol,{ascending:false});
-      if(error){ console.warn(`${table} not available yet:`, error.message); return []; }
-      return data || [];
-    }catch(e){ console.warn(`${table} load failed:`, e); return []; }
-  };
-  state.dailyCloseoffs = await safeFetch('daily_closeoffs','close_date');
-  state.weeklyReviews = await safeFetch('weekly_reviews','week_start');
-  state.monthlyReviews = await safeFetch('monthly_reviews','month_key');
-}
 
 updateOverview = function(){
   renderAssistantOverview();
-  const streak=Object.values(state.fitnessHeatmap||{}).filter(Boolean).length;
-  const streakPill = document.getElementById('streakPill');
-  if(streakPill) streakPill.textContent=`🔥 ${streak} day streak`;
+  const streak = Object.values(state.fitnessHeatmap || {}).filter(Boolean).length;
+  const pill = document.getElementById('streakPill');
+  if(pill) pill.textContent = `🔥 ${streak} day streak`;
 };
 
-function assistantWeekBounds(date=new Date()){
-  const d=new Date(date);
-  const day=(d.getDay()+6)%7;
-  const monday=new Date(d); monday.setDate(d.getDate()-day); monday.setHours(0,0,0,0);
-  const sunday=new Date(monday); sunday.setDate(monday.getDate()+6); sunday.setHours(23,59,59,999);
-  return {monday,sunday,weekStart:monday.toISOString().slice(0,10)};
+// ── Load review data from Supabase ──
+async function loadReviewData(){
+  if(!currentUser?.id) return;
+  const safe = async (table, col) => {
+    try {
+      const {data,error} = await sb.from(table).select('*').order(col, {ascending:false});
+      if(error){ console.warn(table, error.message); return []; }
+      return data || [];
+    } catch(e){ console.warn(table, e); return []; }
+  };
+  state.dailyCloseoffs = await safe('daily_closeoffs', 'close_date');
+  state.weeklyReviews  = await safe('weekly_reviews',  'week_start');
+  state.monthlyReviews = await safe('monthly_reviews', 'month_key');
+}
+
+// ── Helpers ──
+function esc(v){ return typeof escapeHtml === 'function' ? escapeHtml(v) : String(v||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function val(id){ return document.getElementById(id)?.value || ''; }
+function setVal(id,v){ const el=document.getElementById(id); if(el) el.value = v; }
+function setText(id,v){ const el=document.getElementById(id); if(el) el.textContent = v; }
+
+function assistantWeekBounds(date = new Date()){
+  const d = new Date(date);
+  const day = (d.getDay()+6)%7;
+  const monday = new Date(d); monday.setDate(d.getDate()-day); monday.setHours(0,0,0,0);
+  const sunday = new Date(monday); sunday.setDate(monday.getDate()+6); sunday.setHours(23,59,59,999);
+  return { monday, sunday, weekStart: monday.toISOString().slice(0,10), weekEnd: sunday.toISOString().slice(0,10) };
 }
 function assistantThisWeekMeetings(){
-  const {monday,sunday}=assistantWeekBounds();
-  return (state.workMeetings||[]).filter(m=>{ const dt=new Date((m.meeting_date||'')+'T00:00:00'); return dt>=monday && dt<=sunday; });
+  const {monday,sunday} = assistantWeekBounds();
+  return (state.workMeetings||[]).filter(m => { const dt = new Date((m.meeting_date||'')+'T00:00:00'); return dt >= monday && dt <= sunday; });
 }
 function assistantAllFollowups(){
-  return (state.workMeetings||[]).flatMap(m=>(m.followups||[]).map((f,i)=>({...f,index:i,meetingId:m.id,meeting:m.title||'Meeting',project:m.project||'',meetingDate:m.meeting_date||''})));
+  return (state.workMeetings||[]).flatMap(m => (m.followups||[]).map((f,i) => ({...f, index:i, meetingId:m.id, meeting:m.title||'Meeting', project:m.project||'', meetingDate:m.meeting_date||''})));
 }
-function assistantIsClosed(f){ const s=String(f.status||'Open').toLowerCase(); return !!f.moved_to_monday || s.includes('done') || s.includes('drop') || s.includes('closed'); }
-function assistantOpenItems(){ return assistantAllFollowups().filter(f=>!assistantIsClosed(f)); }
-function assistantDueSoonItems(){ const now=new Date(); now.setHours(0,0,0,0); const soon=new Date(now); soon.setDate(now.getDate()+7); return assistantOpenItems().filter(f=>{ if(!f.due_date) return false; const d=new Date(f.due_date+'T00:00:00'); return d>=now && d<=soon; }); }
-function assistantWaitingItems(){ return assistantOpenItems().filter(f=>String(f.status||'').toLowerCase().includes('wait')); }
-function assistantClosedThisWeek(){ return assistantThisWeekMeetings().flatMap(m=>m.followups||[]).filter(f=>assistantIsClosed(f)).length; }
-function assistantGrowthItems(){ const active=typeof activeGrowthGoals==='function' ? activeGrowthGoals() : []; return active.map(g=>({title:g.name, meta:`Growth · ${g.target_days||g.targetDays||12} target days`, note:'Ask: what did this habit give me?'})); }
-function esc(v){ return typeof escapeHtml==='function' ? escapeHtml(v) : String(v||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-function setText(id, value){ const el=document.getElementById(id); if(el) el.textContent=value; }
-function val(id){ return document.getElementById(id)?.value || ''; }
-function setVal(id,v){ const el=document.getElementById(id); if(el) el.value=v; }
-function assistantItemHtml(item, opts={}){
-  const color=opts.color||'var(--orange)';
-  const title=esc(item.text||item.title||'Open item');
-  const meta=esc(item.meta || [item.meeting, item.project, item.due_date?`Due ${item.due_date}`:''].filter(Boolean).join(' · '));
-  return `<div class="loop-item"><div class="dot" style="background:${color}"></div><div class="item-main"><div class="item-title">${title}</div><div class="item-meta">${meta}</div><div class="item-actions"><button class="mini-action done" onclick="assistantMarkDone('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">Done</button><button class="mini-action carry" onclick="assistantMoveToMonday('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">Move to monday</button><button class="mini-action wait" onclick="assistantMarkWaiting('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">Not now</button><button class="mini-action drop" onclick="assistantDropItem('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">No longer needed</button></div></div></div>`;
-}
+function assistantIsClosed(f){ const s = String(f.status||'Open').toLowerCase(); return !!f.moved_to_monday || s.includes('done') || s.includes('drop') || s.includes('closed'); }
+function assistantOpenItems(){ return assistantAllFollowups().filter(f => !assistantIsClosed(f)); }
+function assistantDueSoonItems(){ const now=new Date(); now.setHours(0,0,0,0); const soon=new Date(now); soon.setDate(now.getDate()+7); return assistantOpenItems().filter(f => { if(!f.due_date) return false; const d=new Date(f.due_date+'T00:00:00'); return d>=now && d<=soon; }); }
+function assistantWaitingItems(){ return assistantOpenItems().filter(f => String(f.status||'').toLowerCase().includes('wait')); }
+function assistantClosedThisWeek(){ return assistantThisWeekMeetings().flatMap(m => m.followups||[]).filter(f => assistantIsClosed(f)).length; }
+function assistantGrowthItems(){ return (typeof activeGrowthGoals === 'function' ? activeGrowthGoals() : []).map(g => ({title:g.name, meta:`Growth · ${g.targetDays||12} target days`, note:''})); }
+
+// ── Render overview ──
 function renderAssistantOverview(){
   if(!document.getElementById('panel-overview')) return;
-  const open=assistantOpenItems(), due=assistantDueSoonItems(), waiting=assistantWaitingItems(), growth=assistantGrowthItems(), closed=assistantClosedThisWeek(), meetings=assistantThisWeekMeetings();
-  const reflect=meetings.filter(m=>{ const r=workParseReflection(m); return r.feeling && r.feeling!=='Clear / settled'; }).length + growth.length;
-  [['assistantOpenCount',open.length],['assistantClosedCount',closed],['assistantReflectCount',reflect],['queueOpenCount',open.length],['queueDueCount',due.length],['queueWaitingCount',waiting.length],['queueGrowthCount',growth.length],['weeklyClosedCount',closed],['weeklyOpenCount',open.length],['weeklyGrowthCount',reflect],['weeklyNextCount',Math.min(open.length+growth.length,4)],['monthlyOpenCount',open.length],['monthlyWeekCount',state.weeklyReviews?.length||0],['monthlyGrowthCount',growth.length],['monthlyImproveCount',reflect]].forEach(([id,v])=>setText(id,v));
-  const focus=document.getElementById('assistantTodayFocus'); if(focus) focus.textContent=open[0]?.text || growth[0]?.title || 'Use today to close one meaningful loop.';
-  const top=document.getElementById('assistantTopItems'); if(top) top.innerHTML=(open.slice(0,2).map(i=>assistantItemHtml(i)).join('') || '<div class="card-sub">No urgent open loops. Keep today light and clear.</div>');
-  const handover=document.getElementById('assistantHandoverList'); if(handover) handover.innerHTML=`<div class="loop-item"><div class="dot" style="background:var(--orange)"></div><div class="item-main"><div class="item-title">${open.length} item${open.length===1?'':'s'} still carried in My OS.</div><div class="item-meta">Review these before switching off.</div></div></div><div class="loop-item"><div class="dot" style="background:var(--green)"></div><div class="item-main"><div class="item-title">${closed} action${closed===1?'':'s'} moved, closed or dropped this week.</div><div class="item-meta">These are no longer mental load.</div></div></div><div class="loop-item"><div class="dot" style="background:var(--purple)"></div><div class="item-main"><div class="item-title">Growth check-in: ${growth.length || 0} active experiment${growth.length===1?'':'s'}.</div><div class="item-meta">Ask what each one gave you, not just the number.</div></div></div>`;
-  renderAssistantQueue(assistantQueueTab); renderWeeklyReview(weeklyReviewTab); renderMonthlyReviewVisibility();
-}
-function switchAssistantQueue(type, btn){ assistantQueueTab=type; document.querySelectorAll('.queue-tab').forEach(t=>t.classList.remove('active')); if(btn) btn.classList.add('active'); renderAssistantQueue(type); }
-function renderAssistantQueue(type='open'){
-  const el=document.getElementById('assistantQueueContent'); if(!el) return;
-  const open=assistantOpenItems(), due=assistantDueSoonItems(), waiting=assistantWaitingItems(), growth=assistantGrowthItems();
-  if(type==='due') el.innerHTML=(due.map(i=>assistantItemHtml(i,{color:'var(--blue)'})).join('') || '<div class="card-sub">Nothing due soon.</div>');
-  else if(type==='waiting') el.innerHTML=(waiting.map(i=>assistantItemHtml(i,{color:'var(--green)'})).join('') || '<div class="card-sub">Nothing waiting right now.</div>');
-  else if(type==='growth') el.innerHTML=(growth.map(g=>`<div class="loop-item"><div class="dot" style="background:var(--purple)"></div><div class="item-main"><div class="item-title">${esc(g.title)}</div><div class="item-meta">${esc(g.meta)}</div><div class="item-actions"><button class="mini-action carry" onclick="assistantSetGrowthDecision(this,'Continue')">Continue</button><button class="mini-action wait" onclick="assistantSetGrowthDecision(this,'Adjust')">Adjust</button><button class="mini-action drop" onclick="assistantSetGrowthDecision(this,'Pause')">Pause</button></div></div></div>`).join('') || '<div class="card-sub">No active growth experiments.</div>');
-  else el.innerHTML=(open.map(i=>assistantItemHtml(i)).join('') || '<div class="card-sub">No open loops. Nice.</div>');
-}
-function switchWeekly(type, btn){ weeklyReviewTab=type; document.querySelectorAll('.weekly-tab').forEach(t=>t.classList.remove('active')); if(btn) btn.classList.add('active'); renderWeeklyReview(type); }
-function latestWeeklyValue(key){ const {weekStart}=assistantWeekBounds(); const row=(state.weeklyReviews||[]).find(r=>r.week_start===weekStart); return row?.[key] || ''; }
-function renderWeeklyReview(type='closed'){
-  const el=document.getElementById('weeklyContent'); if(!el) return;
-  const open=assistantOpenItems(), closed=assistantClosedThisWeek(), meetings=assistantThisWeekMeetings();
-  const feelings=meetings.map(m=>workParseReflection(m).feeling).filter(Boolean), improves=meetings.map(m=>workParseReflection(m).improve).filter(Boolean);
-  if(type==='open') el.innerHTML=`<div class="review-columns"><div class="review-box"><h4>Open items to decide</h4><div class="loop-list">${open.map(i=>assistantItemHtml(i)).join('') || '<div class="card-sub">No open items.</div>'}</div></div><div class="review-box"><h4>My decision notes</h4><textarea class="textarea" id="weeklyOpenNotes" placeholder="What should stay open, move to monday.com, be parked, or removed?">${esc(latestWeeklyValue('open_notes'))}</textarea></div></div>`;
-  else if(type==='growth') el.innerHTML=`<div class="review-columns"><div class="review-box"><h4>Mood + improvement patterns</h4><ul>${feelings.slice(0,5).map(f=>`<li>Feeling after meeting: ${esc(f)}</li>`).join('') || '<li>No meeting mood data yet.</li>'}${improves.slice(0,5).map(i=>`<li>${esc(i)}</li>`).join('')}</ul></div><div class="review-box"><h4>My reflection notes</h4><textarea class="textarea" id="weeklyMoodNotes" placeholder="How was my mood this week? What kept showing up? What do I want to improve?">${esc(latestWeeklyValue('mood_notes'))}</textarea><div class="decision-row"><button class="chip active" onclick="assistantSetGrowthDecision(this,'Continue')">Continue</button><button class="chip" onclick="assistantSetGrowthDecision(this,'Adjust')">Adjust</button><button class="chip" onclick="assistantSetGrowthDecision(this,'Pause')">Pause</button><button class="chip" onclick="assistantSetGrowthDecision(this,'Complete')">Complete</button></div></div></div>`;
-  else if(type==='next') el.innerHTML=`<div class="review-columns"><div class="review-box"><h4>Suggested next week focus</h4><ul>${open.slice(0,4).map(i=>`<li>${esc(i.text||i.title)}</li>`).join('') || '<li>Keep the week light and intentional.</li>'}</ul></div><div class="review-box"><h4>My weekly close-off</h4><textarea class="textarea" id="weeklyNextNotes" placeholder="Write your final weekly review here. This will be summarised in monthly review.">${esc(latestWeeklyValue('next_notes'))}</textarea></div></div>`;
-  else el.innerHTML=`<div class="review-columns"><div class="review-box"><h4>System summary</h4><ul><li>${closed} work action${closed===1?'':'s'} moved, closed or dropped</li><li>${meetings.length} meeting close-off${meetings.length===1?'':'s'} this week</li><li>${open.length} item${open.length===1?'':'s'} still open</li></ul></div><div class="review-box"><h4>My weekly notes</h4><textarea class="textarea" id="weeklyClosedNotes" placeholder="What felt properly closed this week? What gave me relief? What should I acknowledge?">${esc(latestWeeklyValue('closed_notes'))}</textarea></div></div>`;
-}
-function setDailyEnergy(btn){ document.querySelectorAll('.energy-row .chip').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); dailyEnergy=btn.dataset.energy||btn.textContent.trim()||'Medium'; }
-async function assistantSaveByKey(table, key, payload){
-  const query=sb.from(table).select('*').eq('user_id', currentUser.id).eq(key, payload[key]).maybeSingle();
-  const {data:existing,error:selectError}=await query;
-  if(selectError && selectError.code !== 'PGRST116') throw selectError;
-  if(existing?.id){
-    const {data,error}=await sb.from(table).update(payload).eq('id', existing.id).eq('user_id', currentUser.id).select().single();
-    if(error) throw error;
-    return data;
+  const open = assistantOpenItems(), due = assistantDueSoonItems(), waiting = assistantWaitingItems(), growth = assistantGrowthItems(), closed = assistantClosedThisWeek();
+  const reflect = assistantThisWeekMeetings().filter(m => { const r = workParseReflection(m); return r.feeling && r.feeling !== 'Clear / settled'; }).length + growth.length;
+
+  setText('assistantOpenCount', open.length);
+  setText('assistantClosedCount', closed);
+  setText('assistantReflectCount', reflect);
+  setText('queueOpenCount', open.length);
+  setText('queueDueCount', due.length);
+  setText('queueWaitingCount', waiting.length);
+  setText('queueGrowthCount', growth.length);
+
+  const focus = document.getElementById('assistantTodayFocus');
+  if(focus) focus.textContent = open[0]?.text || growth[0]?.title || 'No urgent open loops. Keep today intentional.';
+  const top = document.getElementById('assistantTopItems');
+  if(top) top.innerHTML = open.slice(0,3).map(i => assistantItemHtml(i)).join('') || '<div class="card-sub">No open loops right now.</div>';
+
+  renderAssistantQueue(assistantQueueTab);
+
+  // Daily label
+  const today = todayObj.toLocaleDateString('en-AU', {weekday:'long', day:'numeric', month:'long'});
+  setText('dailyCloseoffDateLabel', today);
+
+  // Load today's existing close-off into fields
+  const todayKey = new Date().toISOString().slice(0,10);
+  const existing = (state.dailyCloseoffs||[]).find(r => r.close_date === todayKey);
+  if(existing){
+    setVal('dailyStillOpen', existing.still_open || '');
+    setVal('dailyLetGo', existing.let_go || '');
+    setVal('dailyTomorrowMove', existing.tomorrow_first_move || '');
+    const energy = existing.energy || 'Medium';
+    dailyEnergy = energy;
+    document.querySelectorAll('.energy-row .chip').forEach(b => b.classList.toggle('active', (b.dataset.energy||b.textContent.trim()) === energy));
   }
-  const {data,error}=await sb.from(table).insert(payload).select().single();
-  if(error) throw error;
-  return data;
+
+  // Log calendar
+  renderLogCalendar();
+
+  // Weekly range label
+  const {weekStart, weekEnd} = assistantWeekBounds();
+  setText('weeklyRangeLabel', `${weekStart} → ${weekEnd}`);
+
+  // Weekly daily context — pull this week's daily close-offs
+  renderWeeklyDailyContext();
+
+  // Load saved weekly notes
+  const weekRow = (state.weeklyReviews||[]).find(r => r.week_start === weekStart);
+  setVal('weeklyClosedNotes', weekRow?.closed_notes || '');
+  setVal('weeklyOpenNotes',   weekRow?.open_notes   || '');
+  setVal('weeklyMoodNotes',   weekRow?.mood_notes   || '');
+  setVal('weeklyNextNotes',   weekRow?.next_notes   || '');
+
+  // Monthly
+  renderMonthlyVisibility();
+}
+
+// ── Review inbox queue ──
+function assistantItemHtml(item, opts={}){
+  const color = opts.color || 'var(--orange)';
+  const title = esc(item.text || item.title || 'Open item');
+  const meta  = esc([item.meeting, item.project, item.due_date ? `Due ${item.due_date}` : ''].filter(Boolean).join(' · '));
+  return `<div class="loop-item"><div class="dot" style="background:${color}"></div><div class="item-main"><div class="item-title">${title}</div><div class="item-meta">${meta}</div><div class="item-actions"><button class="mini-action done" onclick="assistantMarkDone('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">Close</button><button class="mini-action carry" onclick="assistantMoveToMonday('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">Move to monday</button><button class="mini-action wait" onclick="assistantMarkWaiting('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">Not now</button><button class="mini-action drop" onclick="assistantDropItem('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">No longer needed</button></div></div></div>`;
+}
+function switchAssistantQueue(type, btn){
+  assistantQueueTab = type;
+  document.querySelectorAll('.queue-tabs-row .queue-tab').forEach(t => t.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  renderAssistantQueue(type);
+}
+function renderAssistantQueue(type='open'){
+  const el = document.getElementById('assistantQueueContent'); if(!el) return;
+  const open = assistantOpenItems(), due = assistantDueSoonItems(), waiting = assistantWaitingItems(), growth = assistantGrowthItems();
+  if(type === 'due') el.innerHTML = due.map(i => assistantItemHtml(i,{color:'var(--blue)'})).join('') || '<div class="card-sub">Nothing due soon.</div>';
+  else if(type === 'waiting') el.innerHTML = waiting.map(i => assistantItemHtml(i,{color:'var(--green)'})).join('') || '<div class="card-sub">Nothing waiting.</div>';
+  else if(type === 'growth') el.innerHTML = growth.map(g => `<div class="loop-item"><div class="dot" style="background:var(--purple)"></div><div class="item-main"><div class="item-title">${esc(g.title)}</div><div class="item-meta">${esc(g.meta)}</div></div></div>`).join('') || '<div class="card-sub">No active growth habits.</div>';
+  else el.innerHTML = open.map(i => assistantItemHtml(i)).join('') || '<div class="card-sub">No open loops. Nice.</div>';
+}
+
+// ── Log calendar ──
+function switchLogTab(tab, btn){
+  logTab = tab;
+  document.querySelectorAll('.log-tab').forEach(t => t.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  renderLogCalendar();
+}
+function logCalPrev(){ logCalMonth--; if(logCalMonth < 0){ logCalMonth = 11; logCalYear--; } renderLogCalendar(); }
+function logCalNext(){ logCalMonth++; if(logCalMonth > 11){ logCalMonth = 0; logCalYear++; } renderLogCalendar(); }
+
+function renderLogCalendar(){
+  const el = document.getElementById('logCalendar'); if(!el) return;
+  const label = document.getElementById('logCalLabel');
+
+  if(logTab === 'daily'){
+    if(label) label.textContent = `${MONTH_NAMES[logCalMonth]} ${logCalYear}`;
+    const first = new Date(logCalYear, logCalMonth, 1);
+    const days  = new Date(logCalYear, logCalMonth+1, 0).getDate();
+    const start = (first.getDay()+6)%7;
+    const todayStr = new Date().toISOString().slice(0,10);
+    // Build set of dates with close-offs
+    const filled = new Set((state.dailyCloseoffs||[]).map(r => r.close_date));
+    let html = ['Mo','Tu','We','Th','Fr','Sa','Su'].map(d => `<div class="log-cal-day-label">${d}</div>`).join('');
+    for(let i=0;i<start;i++) html += '<div class="log-cal-day empty"></div>';
+    for(let d=1;d<=days;d++){
+      const key = dayKey(logCalYear, logCalMonth, d);
+      const hasDot = filled.has(key);
+      const isToday = key === todayStr;
+      const isSel = key === logSelectedDate;
+      html += `<div class="log-cal-day${hasDot?' has-daily':''}${isToday?' today':''}${isSel?' selected':''}" onclick="selectLogDate('${key}')">${d}</div>`;
+    }
+    el.innerHTML = html;
+
+  } else if(logTab === 'weekly'){
+    if(label) label.textContent = `${logCalYear}`;
+    // Show weeks of the year as rows
+    const weeks = getWeeksOfYear(logCalYear);
+    const filledWeeks = new Set((state.weeklyReviews||[]).map(r => r.week_start));
+    let html = '';
+    weeks.forEach(w => {
+      const has = filledWeeks.has(w.start);
+      html += `<div class="log-cal-day${has?' has-weekly':''}" style="aspect-ratio:unset;padding:4px;font-size:10px;border-radius:8px;" onclick="selectLogWeek('${w.start}')">${w.label}</div>`;
+    });
+    el.style.gridTemplateColumns = 'repeat(4,1fr)';
+    el.innerHTML = html;
+
+  } else {
+    // Monthly tab — show last 12 months
+    if(label) label.textContent = 'Last 12 months';
+    const filledMonths = new Set((state.monthlyReviews||[]).map(r => r.month_key));
+    let html = '';
+    for(let i=11;i>=0;i--){
+      const d = new Date(); d.setDate(1); d.setMonth(d.getMonth()-i);
+      const mk = monthKey(d.getFullYear(), d.getMonth());
+      const has = filledMonths.has(mk);
+      html += `<div class="log-cal-day${has?' has-monthly':''}" style="aspect-ratio:unset;padding:6px;font-size:10px;border-radius:8px;" onclick="selectLogMonth('${mk}')">${MONTH_SHORT[d.getMonth()]}<br>${d.getFullYear()}</div>`;
+    }
+    el.style.gridTemplateColumns = 'repeat(4,1fr)';
+    el.innerHTML = html;
+  }
+}
+
+function getWeeksOfYear(year){
+  const weeks = [];
+  let d = new Date(year, 0, 1);
+  // go to first Monday
+  while((d.getDay()+6)%7 !== 0) d.setDate(d.getDate()+1);
+  while(d.getFullYear() <= year){
+    const start = d.toISOString().slice(0,10);
+    const end = new Date(d); end.setDate(d.getDate()+6);
+    if(end.getFullYear() < year){ d.setDate(d.getDate()+7); continue; }
+    weeks.push({ start, label: `${d.getDate()}/${d.getMonth()+1}` });
+    d.setDate(d.getDate()+7);
+    if(d.getFullYear() > year) break;
+  }
+  return weeks;
+}
+
+function selectLogDate(key){
+  logSelectedDate = key;
+  renderLogCalendar();
+  renderLogEntry(key);
+}
+function selectLogWeek(weekStart){
+  const row = (state.weeklyReviews||[]).find(r => r.week_start === weekStart);
+  const el = document.getElementById('logEntryView'); if(!el) return;
+  if(!row){ el.innerHTML = `<div class="card-sub">No weekly review saved for week of ${weekStart}.</div>`; return; }
+  const {weekEnd} = assistantWeekBounds(new Date(weekStart+'T12:00:00'));
+  el.innerHTML = `<div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;">Week ${weekStart} → ${weekEnd}</div>
+    ${logEntryField('What closed', row.closed_notes)}
+    ${logEntryField('What stayed open', row.open_notes)}
+    ${logEntryField('Mood + patterns', row.mood_notes)}
+    ${logEntryField('Next week focus', row.next_notes)}`;
+}
+function selectLogMonth(mk){
+  const row = (state.monthlyReviews||[]).find(r => r.month_key === mk);
+  const el = document.getElementById('logEntryView'); if(!el) return;
+  if(!row){ el.innerHTML = `<div class="card-sub">No monthly review saved for ${mk}.</div>`; return; }
+  el.innerHTML = `<div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;">${mk}</div>${logEntryField('Monthly notes', row.notes)}`;
+}
+function renderLogEntry(key){
+  const row = (state.dailyCloseoffs||[]).find(r => r.close_date === key);
+  const el = document.getElementById('logEntryView'); if(!el) return;
+  if(!row){ el.innerHTML = `<div class="card-sub">No close-off saved for ${key}.</div>`; return; }
+  // Parse date for AU display
+  const [y,m,d] = key.split('-').map(Number);
+  const label = new Date(y, m-1, d).toLocaleDateString('en-AU', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+  const energyColor = row.energy==='Good' ? 'var(--green)' : row.energy==='Low' ? 'var(--pink)' : 'var(--blue)';
+  el.innerHTML = `<div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px;">${label}</div>
+    <span class="log-entry-energy" style="background:${energyColor}20;color:${energyColor}">${row.energy || 'Medium'} energy</span>
+    ${logEntryField('Still open', row.still_open)}
+    ${logEntryField('Let go of', row.let_go)}
+    ${logEntryField("Tomorrow's first move", row.tomorrow_first_move)}`;
+}
+function logEntryField(label, value){
+  if(!value || !value.trim()) return '';
+  return `<div class="log-entry-field"><label>${label}</label><p>${esc(value)}</p></div>`;
+}
+
+// ── Weekly daily context — show this week's daily entries ──
+function renderWeeklyDailyContext(){
+  const el = document.getElementById('weeklyDailyContext'); if(!el) return;
+  const {monday, sunday} = assistantWeekBounds();
+  const entries = (state.dailyCloseoffs||[]).filter(r => {
+    const d = new Date((r.close_date||'')+'T00:00:00');
+    return d >= monday && d <= sunday;
+  }).sort((a,b) => a.close_date > b.close_date ? 1 : -1);
+
+  if(!entries.length){
+    el.innerHTML = '<div class="card-sub" style="margin-bottom:8px;">No daily close-offs this week yet.</div>';
+    return;
+  }
+  el.innerHTML = entries.map(r => {
+    const [y,m,d] = (r.close_date||'').split('-').map(Number);
+    const label = new Date(y,m-1,d).toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});
+    const energyColor = r.energy==='Good'?'var(--green)':r.energy==='Low'?'var(--pink)':'var(--blue)';
+    const parts = [r.still_open && `Open: ${r.still_open}`, r.let_go && `Let go: ${r.let_go}`, r.tomorrow_first_move && `Tomorrow: ${r.tomorrow_first_move}`].filter(Boolean);
+    return `<div class="weekly-day-entry">
+      <div class="weekly-day-entry-head">
+        <span class="weekly-day-entry-date">${label}</span>
+        <span class="weekly-day-entry-energy" style="background:${energyColor}20;color:${energyColor}">${r.energy||'Medium'}</span>
+      </div>
+      ${parts.map(p => `<p>${esc(p)}</p>`).join('')}
+    </div>`;
+  }).join('');
+}
+
+// ── Monthly visibility + context ──
+function renderMonthlyVisibility(){
+  const card = document.getElementById('monthlyReviewCard'); if(!card) return;
+  const d = todayObj.getDate();
+  const show = d >= 25 || d <= 3;
+  card.style.display = show ? 'block' : 'none';
+  if(!show) return;
+
+  // Label
+  setText('monthlyRangeLabel', MONTH_NAMES[todayObj.getMonth()] + ' ' + todayObj.getFullYear());
+
+  // Show this month's weekly reviews as context
+  const mk = monthKey(todayObj.getFullYear(), todayObj.getMonth());
+  const el = document.getElementById('monthlyWeeklyContext'); if(!el) return;
+  const weeks = (state.weeklyReviews||[]).filter(r => r.week_start && r.week_start.startsWith(mk.slice(0,7)));
+  if(!weeks.length){
+    el.innerHTML = '<div class="card-sub" style="margin-bottom:8px;">No weekly reviews this month yet.</div>';
+  } else {
+    el.innerHTML = weeks.map(r => {
+      const parts = [r.closed_notes && `Closed: ${r.closed_notes}`, r.next_notes && `Next: ${r.next_notes}`].filter(Boolean);
+      return `<div class="monthly-week-entry"><div class="monthly-week-entry-head">Week of ${r.week_start}</div>${parts.map(p=>`<p>${esc(p)}</p>`).join('')}</div>`;
+    }).join('');
+  }
+
+  // Load saved monthly notes
+  const row = (state.monthlyReviews||[]).find(r => r.month_key === mk);
+  setVal('monthlyNotes', row?.notes || '');
+}
+
+// ── Daily close-off save ──
+function setDailyEnergy(btn){
+  document.querySelectorAll('.energy-row .chip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  dailyEnergy = btn.dataset.energy || btn.textContent.trim() || 'Medium';
 }
 async function saveDailyCloseoff(){
   if(!currentUser?.id){ alert('Please log in again.'); return; }
-  const btn=document.querySelector('[onclick="saveDailyCloseoff()"]');
+  const btn = document.querySelector('[onclick="saveDailyCloseoff()"]');
   if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
-  const close_date=new Date().toISOString().slice(0,10);
-  // Capture values before any re-render
-  const payload={user_id:currentUser.id,close_date,energy:dailyEnergy,still_open:val('dailyStillOpen'),let_go:val('dailyLetGo'),tomorrow_first_move:val('dailyTomorrowMove'),updated_at:new Date().toISOString()};
+  const close_date = new Date().toISOString().slice(0,10);
+  const still_open = val('dailyStillOpen');
+  const let_go     = val('dailyLetGo');
+  const tomorrow   = val('dailyTomorrowMove');
+  const payload = { user_id:currentUser.id, close_date, energy:dailyEnergy, still_open, let_go, tomorrow_first_move:tomorrow, updated_at:new Date().toISOString() };
   try{
-    const data=await assistantSaveByKey('daily_closeoffs','close_date',payload);
-    const idx=state.dailyCloseoffs.findIndex(r=>r.close_date===close_date);
-    if(idx>=0) state.dailyCloseoffs[idx]=data; else state.dailyCloseoffs.unshift(data);
+    const data = await assistantSaveByKey('daily_closeoffs','close_date',payload);
+    const idx = state.dailyCloseoffs.findIndex(r => r.close_date === close_date);
+    if(idx >= 0) state.dailyCloseoffs[idx] = data; else state.dailyCloseoffs.unshift(data);
+    logSelectedDate = close_date;
+    renderLogCalendar();
+    renderLogEntry(close_date);
+    renderWeeklyDailyContext();
     showSaved();
     if(btn){ btn.textContent='✓ Saved!'; setTimeout(()=>{ btn.textContent='✓ Save'; btn.disabled=false; },2000); return; }
-  }catch(error){ console.error(error); alert('Could not save daily close-off: '+(error.message||error)); }
-  finally{ if(btn){ btn.disabled=false; } }
-}
-async function saveWeeklyReview(){
-  if(!currentUser?.id){ alert('Please log in again.'); return; }
-  const btn=document.querySelector('[onclick="saveWeeklyReview()"]');
-  if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
-  const {weekStart,sunday}=assistantWeekBounds();
-  const week_end=sunday.toISOString().slice(0,10);
-  // Capture values BEFORE any re-render
-  const closed_notes=val('weeklyClosedNotes');
-  const open_notes=val('weeklyOpenNotes');
-  const mood_notes=val('weeklyMoodNotes');
-  const next_notes=val('weeklyNextNotes');
-  const payload={user_id:currentUser.id,week_start:weekStart,week_end,closed_notes,open_notes,mood_notes,next_notes,summary_json:{open_count:assistantOpenItems().length,closed_count:assistantClosedThisWeek(),meeting_count:assistantThisWeekMeetings().length},updated_at:new Date().toISOString()};
-  try{
-    const data=await assistantSaveByKey('weekly_reviews','week_start',payload);
-    const idx=state.weeklyReviews.findIndex(r=>r.week_start===weekStart);
-    if(idx>=0) state.weeklyReviews[idx]=data; else state.weeklyReviews.unshift(data);
-    showSaved();
-    if(btn){ btn.textContent='✓ Saved!'; setTimeout(()=>{ btn.textContent='✓ Save weekly review'; btn.disabled=false; },2000); return; }
-  }catch(error){ console.error(error); alert('Could not save weekly review: '+(error.message||error)); }
-  finally{ if(btn){ btn.disabled=false; } }
-}
-async function saveMonthlyReview(){
-  if(!currentUser?.id){ alert('Please log in again.'); return; }
-  const btn=document.querySelector('[onclick="saveMonthlyReview()"]');
-  if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
-  const month_key=monthKey(todayObj.getFullYear(), todayObj.getMonth());
-  // Capture value BEFORE any re-render
-  const notes=val('monthlyNotes');
-  const payload={user_id:currentUser.id,month_key,notes,summary_json:{open_count:assistantOpenItems().length,weekly_count:state.weeklyReviews?.length||0,growth_count:assistantGrowthItems().length},updated_at:new Date().toISOString()};
-  try{
-    const data=await assistantSaveByKey('monthly_reviews','month_key',payload);
-    const idx=state.monthlyReviews.findIndex(r=>r.month_key===month_key);
-    if(idx>=0) state.monthlyReviews[idx]=data; else state.monthlyReviews.unshift(data);
-    showSaved();
-    if(btn){ btn.textContent='✓ Saved!'; setTimeout(()=>{ btn.textContent='✓ Save monthly review'; btn.disabled=false; },2000); return; }
-  }catch(error){ console.error(error); alert('Could not save monthly review: '+(error.message||error)); }
-  finally{ if(btn){ btn.disabled=false; } }
+  } catch(error){ console.error(error); alert('Could not save daily close-off: '+(error.message||error)); }
+  finally{ if(btn) btn.disabled=false; }
 }
 
-function assistantSetGrowthDecision(btn, decision){
-  const group=btn.closest('.item-actions') || btn.closest('.decision-row') || btn.parentElement;
-  if(group) group.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  btn.dataset.decision=decision;
-  showSaved();
+// ── Weekly review save ──
+async function saveWeeklyReview(){
+  if(!currentUser?.id){ alert('Please log in again.'); return; }
+  const btn = document.querySelector('[onclick="saveWeeklyReview()"]');
+  if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
+  const {weekStart, weekEnd} = assistantWeekBounds();
+  const closed_notes = val('weeklyClosedNotes');
+  const open_notes   = val('weeklyOpenNotes');
+  const mood_notes   = val('weeklyMoodNotes');
+  const next_notes   = val('weeklyNextNotes');
+  const payload = { user_id:currentUser.id, week_start:weekStart, week_end:weekEnd, closed_notes, open_notes, mood_notes, next_notes, summary_json:{open_count:assistantOpenItems().length,closed_count:assistantClosedThisWeek(),meeting_count:assistantThisWeekMeetings().length}, updated_at:new Date().toISOString() };
+  try{
+    const data = await assistantSaveByKey('weekly_reviews','week_start',payload);
+    const idx = state.weeklyReviews.findIndex(r => r.week_start === weekStart);
+    if(idx >= 0) state.weeklyReviews[idx] = data; else state.weeklyReviews.unshift(data);
+    showSaved();
+    if(btn){ btn.textContent='✓ Saved!'; setTimeout(()=>{ btn.textContent='✓ Save weekly review'; btn.disabled=false; },2000); return; }
+  } catch(error){ console.error(error); alert('Could not save weekly review: '+(error.message||error)); }
+  finally{ if(btn) btn.disabled=false; }
 }
-function assistantOpenSnapshot(type){
-  if(type==='closed'){
-    const btn=[...document.querySelectorAll('.weekly-tab')].find(b=>String(b.textContent||'').includes('Closed'));
-    switchWeekly('closed', btn || document.querySelector('.weekly-tab'));
-    document.querySelector('.weekly-card')?.scrollIntoView({behavior:'smooth', block:'start'});
-    return;
+
+// ── Monthly review save ──
+async function saveMonthlyReview(){
+  if(!currentUser?.id){ alert('Please log in again.'); return; }
+  const btn = document.querySelector('[onclick="saveMonthlyReview()"]');
+  if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
+  const mk = monthKey(todayObj.getFullYear(), todayObj.getMonth());
+  const notes = val('monthlyNotes');
+  const payload = { user_id:currentUser.id, month_key:mk, notes, summary_json:{open_count:assistantOpenItems().length,weekly_count:state.weeklyReviews?.length||0,growth_count:assistantGrowthItems().length}, updated_at:new Date().toISOString() };
+  try{
+    const data = await assistantSaveByKey('monthly_reviews','month_key',payload);
+    const idx = state.monthlyReviews.findIndex(r => r.month_key === mk);
+    if(idx >= 0) state.monthlyReviews[idx] = data; else state.monthlyReviews.unshift(data);
+    showSaved();
+    if(btn){ btn.textContent='✓ Saved!'; setTimeout(()=>{ btn.textContent='✓ Save monthly review'; btn.disabled=false; },2000); return; }
+  } catch(error){ console.error(error); alert('Could not save monthly review: '+(error.message||error)); }
+  finally{ if(btn) btn.disabled=false; }
+}
+
+// ── Upsert helper ──
+async function assistantSaveByKey(table, key, payload){
+  const {data:existing, error:selErr} = await sb.from(table).select('*').eq('user_id',currentUser.id).eq(key,payload[key]).maybeSingle();
+  if(selErr && selErr.code !== 'PGRST116') throw selErr;
+  if(existing?.id){
+    const {data,error} = await sb.from(table).update(payload).eq('id',existing.id).eq('user_id',currentUser.id).select().single();
+    if(error) throw error;
+    return data;
   }
-  const q=type==='growth'?'growth':'open';
-  const btn=[...document.querySelectorAll('.queue-tab')].find(b=>String(b.getAttribute('onclick')||'').includes(`'${q}'`));
-  switchAssistantQueue(q, btn || document.querySelector('.queue-tab'));
-  document.getElementById('assistantQueueContent')?.scrollIntoView({behavior:'smooth', block:'center'});
+  const {data,error} = await sb.from(table).insert(payload).select().single();
+  if(error) throw error;
+  return data;
 }
-function renderMonthlyReviewVisibility(){ const card=document.getElementById('monthlyReviewCard'); if(!card) return; const d=todayObj.getDate(); card.style.display=(d>=25 || d<=3) ? 'block' : 'none'; const title=document.getElementById('monthlyReviewTitle'); if(title) title.textContent=`${MONTH_NAMES[todayObj.getMonth()]} review will be ready soon.`; }
-async function assistantUpdateFollowup(meetingId, index, patch){ const m=(state.workMeetings||[]).find(x=>String(x.id)===String(meetingId)); if(!m || index<0 || !m.followups?.[index]) return; m.followups[index]={...m.followups[index],...patch}; const {error}=await sb.from('work_meetings').update({followups:m.followups,updated_at:new Date().toISOString()}).eq('id',meetingId).eq('user_id',currentUser.id); if(error){ console.error(error); alert('Could not update item: '+error.message); return; } renderAssistantOverview(); renderWorkTab(); showSaved(); }
+
+// ── PDF download ──
+async function downloadCloseoffPDF(){
+  const entries = (state.dailyCloseoffs||[]).slice().sort((a,b) => a.close_date > b.close_date ? 1 : -1);
+  if(!entries.length){ alert('No close-offs saved yet.'); return; }
+  let html = `<html><head><style>body{font-family:sans-serif;padding:32px;color:#111}h1{font-size:20px;margin-bottom:4px}p.sub{color:#666;font-size:13px;margin-bottom:24px}.entry{margin-bottom:24px;border-bottom:1px solid #eee;padding-bottom:16px}.date{font-size:15px;font-weight:700;margin-bottom:4px}.energy{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:2px 10px;margin-bottom:8px;background:#e0f0ff;color:#1a5fb4}.field{margin-bottom:8px}.field label{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#888;display:block;margin-bottom:2px}.field p{font-size:13px;margin:0}</style></head><body>`;
+  html += `<h1>My OS — Close-off Log</h1><p class="sub">Downloaded ${new Date().toLocaleDateString('en-AU')} · ${entries.length} entries</p>`;
+  entries.forEach(r => {
+    const [y,m,d] = (r.close_date||'').split('-').map(Number);
+    const label = new Date(y,m-1,d).toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    html += `<div class="entry"><div class="date">${label}</div><span class="energy">${r.energy||'Medium'} energy</span>`;
+    if(r.still_open)          html += `<div class="field"><label>Still open</label><p>${r.still_open}</p></div>`;
+    if(r.let_go)              html += `<div class="field"><label>Let go of</label><p>${r.let_go}</p></div>`;
+    if(r.tomorrow_first_move) html += `<div class="field"><label>Tomorrow's first move</label><p>${r.tomorrow_first_move}</p></div>`;
+    html += `</div>`;
+  });
+  html += `</body></html>`;
+  const win = window.open('','_blank');
+  win.document.write(html);
+  win.document.close();
+  setTimeout(() => win.print(), 500);
+}
+
+// ── Follow-up actions ──
+async function assistantUpdateFollowup(meetingId, index, patch){
+  const m = (state.workMeetings||[]).find(x => String(x.id) === String(meetingId));
+  if(!m || index < 0 || !m.followups?.[index]) return;
+  m.followups[index] = {...m.followups[index], ...patch};
+  const {error} = await sb.from('work_meetings').update({followups:m.followups, updated_at:new Date().toISOString()}).eq('id',meetingId).eq('user_id',currentUser.id);
+  if(error){ console.error(error); alert('Could not update item: '+error.message); return; }
+  renderAssistantOverview(); renderWorkTab(); showSaved();
+}
 function assistantMarkDone(id,i){ assistantUpdateFollowup(id,i,{status:'Done'}); }
 function assistantMoveToMonday(id,i){ assistantUpdateFollowup(id,i,{moved_to_monday:true,status:'Done'}); }
 function assistantMarkWaiting(id,i){ assistantUpdateFollowup(id,i,{status:'Waiting'}); }
 function assistantDropItem(id,i){ assistantUpdateFollowup(id,i,{status:'Dropped'}); }
 
-function workParseReflection(m){ if(!m?.note_html) return {}; try{ const obj=JSON.parse(m.note_html); return obj && typeof obj==='object' ? obj : {what_happened:stripHtml(m.note_html||'')}; } catch{ return {what_happened:stripHtml(m.note_html||'')}; } }
+// ── Work tab integration ──
+function workParseReflection(m){ if(!m?.note_html) return {}; try{ const o=JSON.parse(m.note_html); return o&&typeof o==='object'?o:{what_happened:stripHtml(m.note_html||'')}; }catch{ return {what_happened:stripHtml(m.note_html||'')}; } }
 function collectWorkReflection(){ return {what_happened:val('workWhatHappened'),key_takeaway:val('workKeyTakeaway'),feeling:val('workMeetingFeeling'),improve:val('workImproveNext'),remember:val('workRememberPersonally')}; }
-function workSetReflectionFields(m={}){ const r=workParseReflection(m); setVal('workWhatHappened',r.what_happened||''); setVal('workKeyTakeaway',r.key_takeaway||''); setVal('workMeetingFeeling',r.feeling||'Still carrying open loops'); setVal('workImproveNext',r.improve||''); setVal('workRememberPersonally',r.remember||''); }
-workIsActiveFollowupStatus = function(status, f={}){ if(f.moved_to_monday) return false; return ['Open','Waiting','Carry next week'].includes(status || 'Open'); };
-normaliseWorkMeeting = function(m){ return {id:isUuidLike(m.id)?String(m.id):myosUuid(),title:m.title||'Untitled meeting',meeting_date:m.meeting_date||m.date||workSelectedDate,project:m.project||'',people:m.people||'',meeting_type:m.meeting_type||m.type||'Meeting',note_html:m.note_html||'',textboxes:[],followups:Array.isArray(m.followups)?m.followups.map(f=>({text:f.text||'',status:f.status||'Open',due_date:f.due_date||f.date||'',weekday:f.weekday||workWeekdayLabel(f.due_date||f.date||''),moved_to_monday:!!f.moved_to_monday})):[],created_at:m.created_at||new Date().toISOString(),updated_at:m.updated_at||new Date().toISOString()}; };
-renderWorkSummary = function(){ const {monday,sunday}=assistantWeekBounds(); const meetings=(state.workMeetings||[]).filter(m=>{ const dt=new Date((m.meeting_date||'')+'T00:00:00'); return dt>=monday && dt<=sunday; }); const all=meetings.flatMap(m=>m.followups||[]); setText('work-meeting-count',meetings.length); setText('work-monday-count',all.filter(f=>assistantIsClosed(f)).length); setText('work-followup-count',all.filter(f=>!assistantIsClosed(f)).length); };
+function workSetReflectionFields(m={}){ const r=workParseReflection(m); setVal('workWhatHappened',r.what_happened||''); setVal('workKeyTakeaway',r.key_takeaway||''); setVal('workMeetingFeeling',r.feeling||'Clear / settled'); setVal('workImproveNext',r.improve||''); setVal('workRememberPersonally',r.remember||''); }
+workIsActiveFollowupStatus = function(status,f={}){ if(f.moved_to_monday) return false; return ['Open','Waiting','Carry next week'].includes(status||'Open'); };
+normaliseWorkMeeting = function(m){ return {id:isUuidLike(m.id)?String(m.id):myosUuid(),title:m.title||'Untitled meeting',meeting_date:m.meeting_date||m.date||workSelectedDate,project:m.project||'',people:m.people||'',meeting_type:m.meeting_type||m.type||'Meeting',note_html:m.note_html||'',textboxes:[],followups:Array.isArray(m.followups)?m.followups.map(f=>({text:f.text||'',status:f.status||'Open',due_date:f.due_date||'',weekday:f.weekday||workWeekdayLabel(f.due_date||''),moved_to_monday:!!f.moved_to_monday})):[],created_at:m.created_at||new Date().toISOString(),updated_at:m.updated_at||new Date().toISOString()}; };
+renderWorkSummary = function(){ const {monday,sunday}=assistantWeekBounds(); const meetings=(state.workMeetings||[]).filter(m=>{ const dt=new Date((m.meeting_date||'')+'T00:00:00'); return dt>=monday&&dt<=sunday; }); const all=meetings.flatMap(m=>m.followups||[]); setText('work-meeting-count',meetings.length); setText('work-monday-count',all.filter(f=>assistantIsClosed(f)).length); setText('work-followup-count',all.filter(f=>!assistantIsClosed(f)).length); };
 renderWorkCalendar = function(){ const el=document.getElementById('work-calendar'); if(!el) return; const label=document.getElementById('work-month-label'); if(label) label.textContent=`${MONTH_NAMES[workViewMonth]} ${workViewYear}`; const first=new Date(workViewYear,workViewMonth,1); const days=new Date(workViewYear,workViewMonth+1,0).getDate(); const start=(first.getDay()+6)%7; let html=['Mo','Tu','We','Th','Fr','Sa','Su'].map(d=>`<div class="work-cal-label">${d}</div>`).join(''); for(let i=0;i<start;i++) html+='<div class="work-day empty"></div>'; for(let d=1;d<=days;d++){ const key=dayKey(workViewYear,workViewMonth,d); const meetings=(state.workMeetings||[]).filter(m=>workMeetingDateKey(m)===key); const pills=meetings.slice(0,2).map(m=>{ const open=(m.followups||[]).some(f=>!assistantIsClosed(f)); return `<span class="work-event-pill ${open?'open':'closed'}">${workMeetingTitle(m)}${open?'':' ✓'}</span>`; }).join('')+(meetings.length>2?`<span class="work-event-pill more">+${meetings.length-2} more</span>`:''); html+=`<div class="work-day ${key===workSelectedDate?'selected':''}" onclick="selectWorkDate('${key}')"><div class="work-day-num">${d}</div>${pills}</div>`; } el.innerHTML=html; };
-openAddWorkMeetingModal = function(dateKey=''){ workEditingMeetingId=''; setText('work-modal-title','Meeting close-off'); setVal('workMeetingId',''); setVal('workMeetingTitle',''); setVal('workMeetingDate',workDateKeyFromInput(dateKey)); setVal('workMeetingProject',''); setVal('workMeetingPeople',''); setVal('workMeetingType','Meeting'); workSetReflectionFields({}); document.getElementById('workFollowRows').innerHTML=''; workAddFollowupRow('', 'Open', '', false); document.getElementById('workMeetingModal').classList.add('open'); setTimeout(()=>document.getElementById('workMeetingTitle')?.focus(),50); };
+openAddWorkMeetingModal = function(dateKey=''){ workEditingMeetingId=''; setText('work-modal-title','Meeting close-off'); setVal('workMeetingId',''); setVal('workMeetingTitle',''); setVal('workMeetingDate',workDateKeyFromInput(dateKey)); setVal('workMeetingProject',''); setVal('workMeetingPeople',''); setVal('workMeetingType','Meeting'); workSetReflectionFields({}); document.getElementById('workFollowRows').innerHTML=''; workAddFollowupRow('','Open','',false); document.getElementById('workMeetingModal').classList.add('open'); setTimeout(()=>document.getElementById('workMeetingTitle')?.focus(),50); };
 openWorkMeeting = function(id){ const m=(state.workMeetings||[]).find(x=>String(x.id)===String(id)); if(!m) return; workEditingMeetingId=String(id); setText('work-modal-title','Edit close-off'); setVal('workMeetingId',m.id); setVal('workMeetingTitle',m.title||''); setVal('workMeetingDate',workMeetingDateKey(m)); setVal('workMeetingProject',m.project||''); setVal('workMeetingPeople',m.people||''); setVal('workMeetingType',m.meeting_type||'Meeting'); workSetReflectionFields(m); document.getElementById('workFollowRows').innerHTML=''; (m.followups?.length?m.followups:[{text:'',status:'Open',due_date:'',moved_to_monday:false}]).forEach(f=>workAddFollowupRow(f.text||'',f.status||'Open',f.due_date||'',!!f.moved_to_monday)); document.getElementById('workMeetingModal').classList.add('open'); };
-workAddFollowupRow = function(text='', status='Open', dueDate='', moved=false){ const wrap=document.getElementById('workFollowRows'); if(!wrap) return; const row=document.createElement('div'); row.className='follow-row'; const weekday=workWeekdayLabel(dueDate); row.innerHTML=`<input class="input work-follow-text" value="${escapeAttr(text)}" placeholder="Action item"><select class="input work-follow-status"><option value="Open" ${status==='Open'?'selected':''}>Open</option><option value="Waiting" ${status==='Waiting'?'selected':''}>Waiting</option><option value="Carry next week" ${status==='Carry next week'?'selected':''}>Carry next week</option><option value="Done" ${status==='Done'?'selected':''}>Done</option><option value="Dropped" ${status==='Dropped'?'selected':''}>Dropped</option></select><input class="input work-follow-date" type="date" value="${escapeAttr(dueDate)}" onchange="workRefreshFollowupWeekday(this)"><div class="work-follow-weekday">${weekday||'No date'}</div><label class="checkbox-card"><input type="checkbox" class="work-follow-monday" ${moved?'checked':''}> Moved to monday.com</label><button class="btn btn-ghost btn-small" onclick="this.closest('.follow-row').remove()">Remove</button>`; wrap.appendChild(row); };
+workAddFollowupRow = function(text='',status='Open',dueDate='',moved=false){ const wrap=document.getElementById('workFollowRows'); if(!wrap) return; const row=document.createElement('div'); row.className='follow-row'; const weekday=workWeekdayLabel(dueDate); row.innerHTML=`<input class="input work-follow-text" value="${escapeAttr(text)}" placeholder="Action item"><select class="input work-follow-status"><option value="Open" ${status==='Open'?'selected':''}>Open</option><option value="Waiting" ${status==='Waiting'?'selected':''}>Waiting</option><option value="Carry next week" ${status==='Carry next week'?'selected':''}>Carry next week</option><option value="Done" ${status==='Done'?'selected':''}>Done</option><option value="Dropped" ${status==='Dropped'?'selected':''}>Dropped</option></select><input class="input work-follow-date" type="date" value="${escapeAttr(dueDate)}" onchange="workRefreshFollowupWeekday(this)"><div class="work-follow-weekday">${weekday||'No date'}</div><label class="checkbox-card"><input type="checkbox" class="work-follow-monday" ${moved?'checked':''}> Moved to monday.com</label><button class="btn btn-ghost btn-small" onclick="this.closest('.follow-row').remove()">Remove</button>`; wrap.appendChild(row); };
 collectWorkFollowups = function(){ return [...document.querySelectorAll('#workFollowRows .follow-row')].map(r=>{ const dueDate=r.querySelector('.work-follow-date')?.value||''; return {text:r.querySelector('.work-follow-text')?.value.trim()||'',status:r.querySelector('.work-follow-status')?.value||'Open',due_date:dueDate,weekday:workWeekdayLabel(dueDate),moved_to_monday:!!r.querySelector('.work-follow-monday')?.checked}; }).filter(f=>f.text); };
-saveWorkMeeting = async function(){ const title=val('workMeetingTitle').trim(); const date=val('workMeetingDate'); if(!title||!date){ alert('Meeting title and date are required.'); return; } if(!currentUser?.id){ alert('Please log in again before saving.'); return; } const payload={user_id:currentUser.id,title,meeting_date:date,project:val('workMeetingProject').trim(),people:val('workMeetingPeople').trim(),meeting_type:val('workMeetingType')||'Meeting',note_html:JSON.stringify(collectWorkReflection()),textboxes:[],followups:collectWorkFollowups(),updated_at:new Date().toISOString()}; let data,error; if(workEditingMeetingId){ ({data,error}=await sb.from('work_meetings').update(payload).eq('id',String(workEditingMeetingId)).eq('user_id',currentUser.id).select().single()); } else { ({data,error}=await sb.from('work_meetings').insert(payload).select().single()); } if(error){ console.error(error); alert('Could not save meeting close-off: '+error.message); return; } const saved=normaliseWorkMeeting(data||payload); const existing=state.workMeetings.findIndex(m=>String(m.id)===String(saved.id)); if(existing>=0) state.workMeetings[existing]=saved; else state.workMeetings.unshift(saved); workSelectedDate=date; syncWorkViewToDate(date); workEditingMeetingId=''; closeWorkMeetingModal(); renderWorkTab(); renderAssistantOverview(); showSaved(); };
+saveWorkMeeting = async function(){ const title=val('workMeetingTitle').trim(); const date=val('workMeetingDate'); if(!title||!date){ alert('Meeting title and date are required.'); return; } if(!currentUser?.id){ alert('Please log in again.'); return; } const payload={user_id:currentUser.id,title,meeting_date:date,project:val('workMeetingProject').trim(),people:val('workMeetingPeople').trim(),meeting_type:val('workMeetingType')||'Meeting',note_html:JSON.stringify(collectWorkReflection()),textboxes:[],followups:collectWorkFollowups(),updated_at:new Date().toISOString()}; let data,error; if(workEditingMeetingId){ ({data,error}=await sb.from('work_meetings').update(payload).eq('id',String(workEditingMeetingId)).eq('user_id',currentUser.id).select().single()); } else { ({data,error}=await sb.from('work_meetings').insert(payload).select().single()); } if(error){ console.error(error); alert('Could not save meeting close-off: '+error.message); return; } const saved=normaliseWorkMeeting(data||payload); const existing=state.workMeetings.findIndex(m=>String(m.id)===String(saved.id)); if(existing>=0) state.workMeetings[existing]=saved; else state.workMeetings.unshift(saved); workSelectedDate=date; syncWorkViewToDate(date); workEditingMeetingId=''; closeWorkMeetingModal(); renderWorkTab(); renderAssistantOverview(); showSaved(); };
 renderWorkWeeklyReview = function(){ const el=document.getElementById('work-weekly-review'); if(el) el.innerHTML=''; };
+renderWorkSelectedDay = function(){ const title=document.getElementById('work-selected-title'); if(title) title.textContent=`Selected day — ${workSelectedDate}`; const list=document.getElementById('work-day-meetings'); if(!list) return; const meetings=(state.workMeetings||[]).filter(m=>workMeetingDateKey(m)===workSelectedDate).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at))); if(!meetings.length){ list.innerHTML=`<div class="card-sub">No meeting close-offs for this date.</div><button class="btn btn-ghost btn-small" onclick="openAddWorkMeetingModal('${workSelectedDate}')">＋ Close off a meeting for this day</button>`; return; } list.innerHTML=meetings.map(m=>{ const open=(m.followups||[]).filter(f=>!assistantIsClosed(f)).length; const moved=(m.followups||[]).filter(f=>assistantIsClosed(f)).length; const r=workParseReflection(m); return `<div class="work-meeting-item"><div class="work-meeting-head"><div><div class="work-meeting-title">${workMeetingTitle(m)}</div><div class="work-meeting-meta">${workMeetingProject(m)}${workMeetingPeople(m)?' · '+workMeetingPeople(m):''}</div></div><span class="work-note-type">${open?'Open':'Closed'}</span></div><div class="card-sub">${moved} moved/closed · ${open} kept in My OS${r.feeling?` · ${esc(r.feeling)}`:''}</div><div class="work-meeting-actions"><button class="btn btn-ghost btn-small" onclick="openWorkMeeting('${m.id}')">Open →</button><button class="btn btn-ghost btn-small" onclick="deleteWorkMeeting('${m.id}')">Delete</button></div></div>`; }).join(''); };
 
-renderWorkSelectedDay = function(){
-  const title=document.getElementById('work-selected-title'); if(title) title.textContent=`Selected day — ${workSelectedDate}`;
-  const list=document.getElementById('work-day-meetings'); if(!list) return;
-  const meetings=(state.workMeetings||[]).filter(m=>workMeetingDateKey(m)===workSelectedDate).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
-  if(!meetings.length){ list.innerHTML=`<div class="card-sub">No meeting close-offs for this date.</div><button class="btn btn-ghost btn-small" onclick="openAddWorkMeetingModal('${workSelectedDate}')">＋ Close off meeting for this day</button>`; return; }
-  list.innerHTML=meetings.map(m=>{
-    const open=(m.followups||[]).filter(f=>!assistantIsClosed(f)).length;
-    const moved=(m.followups||[]).filter(f=>assistantIsClosed(f)).length;
-    const r=workParseReflection(m);
-    return `<div class="work-meeting-item"><div class="work-meeting-head"><div><div class="work-meeting-title">${workMeetingTitle(m)}</div><div class="work-meeting-meta">${workMeetingProject(m)}${workMeetingPeople(m)?' · '+workMeetingPeople(m):''}</div></div><span class="work-note-type">${open?'Open':'Closed'}</span></div><div class="card-sub">${moved} moved/closed · ${open} kept in My OS${r.feeling?` · ${esc(r.feeling)}`:''}</div><div class="work-meeting-actions"><button class="btn btn-ghost btn-small" onclick="openWorkMeeting('${m.id}')">Open →</button><button class="btn btn-ghost btn-small" onclick="deleteWorkMeeting('${m.id}')">Delete</button></div></div>`;
-  }).join('');
-};
+boot();
