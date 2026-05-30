@@ -67,16 +67,104 @@
 <!-- OVERVIEW -->
 <div class="panel active" id="panel-overview">
   <div class="overview-shell">
-    <section class="assistant-hero"><div class="hero-row"><div><div class="card-label">Assistant home</div><h2>What needs your attention?</h2><p>Overview shows only what needs a decision, what can be closed, and what tomorrow-you needs to know. The detailed work stays in Finance, Growth and Work.</p></div></div></section>
+
+    <!-- 1. TODAY'S ATTENTION -->
     <div class="top-grid">
-      <div class="card attention-card"><div class="card-label">Today’s focus</div><div class="today-focus" id="assistantTodayFocus">Clear the most important open loops first.</div><p class="card-sub">The assistant uses your close-offs and open loops to suggest a starting point.</p><div class="subtle-divider"></div><div class="loop-list" id="assistantTopItems"></div></div>
-      <div class="card"><div class="card-label">Snapshot</div><div class="snapshot-grid"><button class="snapshot" type="button" onclick="assistantOpenSnapshot('open')"><div class="snapshot-num" id="assistantOpenCount" style="color:var(--orange)">0</div><div class="snapshot-label">Open loops</div></button><button class="snapshot" type="button" onclick="assistantOpenSnapshot('closed')"><div class="snapshot-num" id="assistantClosedCount" style="color:var(--green)">0</div><div class="snapshot-label">Closed this week</div></button><button class="snapshot" type="button" onclick="assistantOpenSnapshot('growth')"><div class="snapshot-num" id="assistantReflectCount" style="color:var(--purple)">0</div><div class="snapshot-label">Need reflection</div></button></div><div class="source-note"><strong>Rule:</strong> monday.com remains the task system. My OS only keeps personal loops, context and handover.</div></div>
+      <div class="card attention-card">
+        <div class="card-label">Today's focus</div>
+        <div class="today-focus" id="assistantTodayFocus">Clear the most important open loops first.</div>
+        <div class="subtle-divider"></div>
+        <div class="loop-list" id="assistantTopItems"></div>
+      </div>
+      <div class="card">
+        <div class="card-label">Snapshot</div>
+        <div class="snapshot-grid">
+          <button class="snapshot" onclick="switchAssistantQueue('open',null)"><div class="snapshot-num" id="assistantOpenCount" style="color:var(--orange)">0</div><div class="snapshot-label">Open loops</div></button>
+          <button class="snapshot" onclick="switchAssistantQueue('due',null)"><div class="snapshot-num" id="assistantClosedCount" style="color:var(--green)">0</div><div class="snapshot-label">Closed this week</div></button>
+          <button class="snapshot" onclick="switchAssistantQueue('growth',null)"><div class="snapshot-num" id="assistantReflectCount" style="color:var(--purple)">0</div><div class="snapshot-label">Need reflection</div></button>
+        </div>
+      </div>
     </div>
-    <div class="card"><div class="section-heading"><div><div class="card-label">Review inbox</div><h3>Items waiting for a decision</h3></div><p>Each item should end as: close, move to monday.com, not now, or no longer needed.</p></div><div class="queue-layout"><div class="queue-tabs"><button class="queue-tab active" onclick="switchAssistantQueue('open',this)"><div class="queue-tab-top"><h4>Open loops</h4><span class="queue-count" id="queueOpenCount" style="background:var(--soft-orange);color:var(--orange)">0</span></div><p>Still carried in My OS.</p></button><button class="queue-tab" onclick="switchAssistantQueue('due',this)"><div class="queue-tab-top"><h4>Due soon</h4><span class="queue-count" id="queueDueCount" style="background:var(--soft-blue);color:var(--blue)">0</span></div><p>Needs attention this week.</p></button><button class="queue-tab" onclick="switchAssistantQueue('waiting',this)"><div class="queue-tab-top"><h4>Waiting</h4><span class="queue-count" id="queueWaitingCount" style="background:var(--soft-green);color:var(--green)">0</span></div><p>Not yours right now.</p></button><button class="queue-tab" onclick="switchAssistantQueue('growth',this)"><div class="queue-tab-top"><h4>Growth</h4><span class="queue-count" id="queueGrowthCount" style="background:var(--soft-purple);color:var(--purple)">0</span></div><p>Needs meaning or decision.</p></button></div><div id="assistantQueueContent"></div></div></div>
-    <div class="closeoff-grid"><div class="card"><div class="section-heading"><div><div class="card-label">Daily close-off</div><h3>Tonight’s handover</h3></div><button class="btn btn-primary btn-small" onclick="saveDailyCloseoff()">✓ Save</button></div><div class="field"><label>What is still open?</label><textarea class="textarea" id="dailyStillOpen" placeholder="What is still in your head?"></textarea></div><div class="field"><label>What can I let go of?</label><textarea class="textarea" id="dailyLetGo" placeholder="What can be released because it is done, moved or not needed?"></textarea></div><div class="field"><label>Tomorrow’s first move</label><textarea class="textarea" id="dailyTomorrowMove" placeholder="What is the first useful thing tomorrow?"></textarea></div><div class="energy-row"><button class="chip" data-energy="Low" onclick="setDailyEnergy(this)">Low</button><button class="chip active" data-energy="Medium" onclick="setDailyEnergy(this)">Medium</button><button class="chip" data-energy="Good" onclick="setDailyEnergy(this)">Good</button></div></div><div class="card"><div class="section-heading"><div><div class="card-label">Assistant handover</div><h3>Tomorrow-you should know</h3></div></div><div class="loop-list" id="assistantHandoverList"></div></div></div>
-    <div class="card"><div class="section-heading"><div><div class="card-label">Review rhythm</div><h3>Simple by design</h3></div><p>Each level only does one job.</p></div><div class="review-rhythm"><div class="rhythm-step"><h4>Daily</h4><p>Clear today’s mental load and create tomorrow’s handover.</p></div><div class="rhythm-step"><h4>Weekly</h4><p>Decide what is closed, open, moved, paused or no longer needed.</p></div><div class="rhythm-step"><h4>Monthly</h4><p>Summarise weekly reviews, growth experiments and patterns to choose the next pivot.</p></div></div></div>
-    <div class="card weekly-card"><div class="section-heading"><div><div class="card-label">Weekly close-off</div><h3>Personal + work review</h3><p class="card-sub">Use daily close-offs, meeting close-offs, growth experiments and finance check-ins to write one clean weekly review.</p></div><button class="btn btn-primary" onclick="saveWeeklyReview()">✓ Save weekly review</button></div><div class="weekly-tabs"><button class="weekly-tab active" onclick="switchWeekly('closed',this)"><div class="count" id="weeklyClosedCount" style="color:var(--green)">0</div><h4>Closed</h4><p>Completed, moved or resolved.</p></button><button class="weekly-tab" onclick="switchWeekly('open',this)"><div class="count" id="weeklyOpenCount" style="color:var(--orange)">0</div><h4>Open / decide</h4><p>Close, not now, move to monday, or remove.</p></button><button class="weekly-tab" onclick="switchWeekly('growth',this)"><div class="count" id="weeklyGrowthCount" style="color:var(--purple)">0</div><h4>Mood + improve</h4><p>Patterns, feelings and improvements.</p></button><button class="weekly-tab" onclick="switchWeekly('next',this)"><div class="count" id="weeklyNextCount" style="color:var(--blue)">0</div><h4>Next week</h4><p>Focus and pivot.</p></button></div><div class="weekly-content" id="weeklyContent"></div></div>
-    <div class="card monthly-card" id="monthlyReviewCard" style="display:none;"><div class="section-heading"><div><div class="card-label">Monthly review</div><h3>Only appears near month-end</h3><p class="card-sub">Shown from the 25th to the 3rd. The assistant summarises daily close-offs, weekly reviews, meeting close-offs, growth experiments and remaining open loops.</p></div><button class="btn btn-ghost" onclick="saveMonthlyReview()">✓ Save monthly review</button></div><div class="monthly-banner"><div><strong id="monthlyReviewTitle">Monthly review is ready.</strong><p class="card-sub" style="margin-top:5px" id="monthlyReviewSub">Review before moving into next month.</p></div><span class="pill" style="background:var(--soft-orange);color:var(--orange)">Shows 25th–3rd</span></div><div class="monthly-summary-grid"><div class="monthly-mini"><strong id="monthlyOpenCount" style="color:var(--orange)">0</strong><span class="snapshot-label">Open items</span></div><div class="monthly-mini"><strong id="monthlyWeekCount" style="color:var(--green)">0</strong><span class="snapshot-label">Weekly summaries</span></div><div class="monthly-mini"><strong id="monthlyGrowthCount" style="color:var(--purple)">0</strong><span class="snapshot-label">Growth decisions</span></div><div class="monthly-mini"><strong id="monthlyImproveCount" style="color:var(--blue)">0</strong><span class="snapshot-label">Areas to improve</span></div></div><div class="field" style="margin-top:12px;"><label>My monthly notes</label><textarea class="textarea" id="monthlyNotes" placeholder="What should I continue, adjust, pause or complete next month?"></textarea></div></div>
+
+    <!-- 2. REVIEW INBOX -->
+    <div class="card">
+      <div class="section-heading">
+        <div><div class="card-label">Review inbox</div><h3>Items waiting for a decision</h3></div>
+        <p>Close &middot; Move to monday &middot; Not now &middot; No longer needed</p>
+      </div>
+      <div class="queue-tabs-row">
+        <button class="queue-tab active" onclick="switchAssistantQueue('open',this)"><h4>Open</h4><span class="queue-count" id="queueOpenCount" style="background:var(--soft-orange);color:var(--orange)">0</span></button>
+        <button class="queue-tab" onclick="switchAssistantQueue('due',this)"><h4>Due soon</h4><span class="queue-count" id="queueDueCount" style="background:var(--soft-blue);color:var(--blue)">0</span></button>
+        <button class="queue-tab" onclick="switchAssistantQueue('waiting',this)"><h4>Waiting</h4><span class="queue-count" id="queueWaitingCount" style="background:var(--soft-green);color:var(--green)">0</span></button>
+        <button class="queue-tab" onclick="switchAssistantQueue('growth',this)"><h4>Growth</h4><span class="queue-count" id="queueGrowthCount" style="background:var(--soft-purple);color:var(--purple)">0</span></button>
+      </div>
+      <div id="assistantQueueContent" style="margin-top:12px;"></div>
+    </div>
+
+    <!-- 3. DAILY CLOSE-OFF + LOG CALENDAR -->
+    <div class="closeoff-review-grid">
+      <div class="card">
+        <div class="section-heading">
+          <div><div class="card-label">Daily close-off</div><h3 id="dailyCloseoffDateLabel">Tonight&#x2019;s handover</h3></div>
+          <button class="btn btn-primary btn-small" onclick="saveDailyCloseoff()">&#x2713; Save</button>
+        </div>
+        <div class="field"><label>What is still open?</label><textarea class="textarea" id="dailyStillOpen" placeholder="What is still in your head?"></textarea></div>
+        <div class="field"><label>What can I let go of?</label><textarea class="textarea" id="dailyLetGo" placeholder="What can be released?"></textarea></div>
+        <div class="field"><label>Tomorrow&#x2019;s first move</label><textarea class="textarea" id="dailyTomorrowMove" placeholder="What is the first useful thing tomorrow?"></textarea></div>
+        <div class="energy-row">
+          <button class="chip" data-energy="Low" onclick="setDailyEnergy(this)">Low</button>
+          <button class="chip active" data-energy="Medium" onclick="setDailyEnergy(this)">Medium</button>
+          <button class="chip" data-energy="Good" onclick="setDailyEnergy(this)">Good</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="section-heading">
+          <div><div class="card-label">Review log</div><h3>Close-off history</h3></div>
+          <button class="btn btn-ghost btn-small" onclick="downloadCloseoffPDF()">&#x2193; PDF</button>
+        </div>
+        <div class="log-tabs">
+          <button class="log-tab active" onclick="switchLogTab('daily',this)">Daily</button>
+          <button class="log-tab" onclick="switchLogTab('weekly',this)">Weekly</button>
+          <button class="log-tab" id="logTabMonthly" onclick="switchLogTab('monthly',this)">Monthly</button>
+        </div>
+        <div class="log-cal-nav">
+          <button class="btn btn-ghost btn-small" onclick="logCalPrev()">&#x2039;</button>
+          <span id="logCalLabel" style="font-size:12px;font-weight:700;color:var(--muted)"></span>
+          <button class="btn btn-ghost btn-small" onclick="logCalNext()">&#x203a;</button>
+        </div>
+        <div class="log-calendar" id="logCalendar"></div>
+        <div class="log-entry-view" id="logEntryView"><div class="card-sub" style="padding:8px 0;">Select a date to review.</div></div>
+      </div>
+    </div>
+
+    <!-- 4. WEEKLY CLOSE-OFF -->
+    <div class="card weekly-card">
+      <div class="section-heading">
+        <div><div class="card-label">Weekly close-off</div><h3 id="weeklyRangeLabel">This week</h3></div>
+        <button class="btn btn-primary btn-small" onclick="saveWeeklyReview()">&#x2713; Save weekly review</button>
+      </div>
+      <div class="weekly-daily-context" id="weeklyDailyContext"></div>
+      <div class="weekly-reflect-grid">
+        <div class="field"><label>What closed this week?</label><textarea class="textarea" id="weeklyClosedNotes" placeholder="Completed, moved or resolved&#x2026;"></textarea></div>
+        <div class="field"><label>What stayed open? Decisions needed?</label><textarea class="textarea" id="weeklyOpenNotes" placeholder="Close, not now, move to monday, or remove&#x2026;"></textarea></div>
+        <div class="field"><label>Mood + patterns this week</label><textarea class="textarea" id="weeklyMoodNotes" placeholder="How was your energy? What kept showing up?"></textarea></div>
+        <div class="field"><label>Next week focus</label><textarea class="textarea" id="weeklyNextNotes" placeholder="What should next week be about?"></textarea></div>
+      </div>
+    </div>
+
+    <!-- 5. MONTHLY CLOSE-OFF (25th to 3rd only) -->
+    <div class="card monthly-card" id="monthlyReviewCard" style="display:none;">
+      <div class="section-heading">
+        <div><div class="card-label">Monthly close-off</div><h3 id="monthlyRangeLabel">This month</h3></div>
+        <button class="btn btn-primary btn-small" onclick="saveMonthlyReview()">&#x2713; Save monthly review</button>
+      </div>
+      <div class="monthly-weekly-context" id="monthlyWeeklyContext"></div>
+      <div class="field" style="margin-top:12px;">
+        <label>What should continue, change, pause or stop?</label>
+        <textarea class="textarea" id="monthlyNotes" placeholder="Summarise your month and decide what to carry forward&#x2026;"></textarea>
+      </div>
+    </div>
+
   </div>
 </div>
 
