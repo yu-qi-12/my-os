@@ -3988,6 +3988,7 @@ function reviewRowsThisMonth(){
   const monthlies=(state.monthlyReviews||[]).filter(r=>String(r.month_key||'')===monthKey);
   return {dailies, weeklies, monthlies};
 }
+function reviewWeeklyDisplayDate(r){ return r?.week_end || r?.week_start || ''; }
 function renderReviewLogCalendar(){
   const el=document.getElementById('reviewLogCalendar');
   if(!el) return;
@@ -3995,7 +3996,7 @@ function renderReviewLogCalendar(){
   if(label) label.textContent=`${MONTH_NAMES[reviewLogMonth]} ${reviewLogYear} review log`;
   const {dailies,weeklies,monthlies}=reviewRowsThisMonth();
   const dailyMap=new Map(dailies.map(r=>[reviewDateOfDaily(r),r]));
-  const weeklyMap=new Map(weeklies.map(r=>[r.week_start,r]));
+  const weeklyMap=new Map(weeklies.map(r=>[reviewWeeklyDisplayDate(r),r]));
   const monthlyMap=new Map(monthlies.map(r=>[reviewEndOfMonthDate(reviewLogYear,reviewLogMonth),r]));
   const first=new Date(reviewLogYear,reviewLogMonth,1);
   const days=new Date(reviewLogYear,reviewLogMonth+1,0).getDate();
@@ -4006,7 +4007,11 @@ function renderReviewLogCalendar(){
   for(let day=1; day<=days; day++){
     const key=`${reviewLogYear}-${String(reviewLogMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     const daily=dailyMap.get(key), weekly=weeklyMap.get(key), monthly=monthlyMap.get(key);
-    const cls=['review-day']; if(daily) cls.push('saved'); if(weekly) cls.push('weekly'); if(monthly) cls.push('monthly'); if(key===todayKey) cls.push('today');
+    const cls=['review-day'];
+    if(daily) cls.push('saved');
+    if(weekly) cls.push('weekly');
+    if(monthly) cls.push('monthly');
+    if(key===todayKey) cls.push('today');
     const items=[];
     if(daily) items.push(`<span class="mood-emoji">${reviewSafeText(daily.energy || daily.mood || '🙂')}</span><span class="review-pill daily">Daily</span>`);
     if(weekly) items.push(`<span class="review-pill weekly">Weekly</span>`);
@@ -4022,31 +4027,51 @@ function changeReviewLogMonth(delta){
   if(reviewLogMonth>11){ reviewLogMonth=0; reviewLogYear++; }
   hideReviewLog(); renderReviewLogCalendar();
 }
+function reviewDetailBox(title, text){
+  return `<div class="detail-box"><h4>${title}</h4><p>${reviewSafeText(text || '—')}</p></div>`;
+}
+function reviewDetailCard(kind, row, dateKey){
+  if(kind==='daily'){
+    return `<div class="review-detail-section"><div class="review-detail-head"><div><div class="review-detail-title">${reviewSafeText(row.energy || row.mood || '🙂')} Daily close-off</div><div class="review-detail-meta">${reviewSafeText(reviewDateOfDaily(row) || dateKey)}</div></div><button class="btn btn-danger btn-small" onclick="deleteReviewRecord('daily_closeoffs','${row.id}','Daily close-off')">Delete</button></div><div class="review-detail-grid">${reviewDetailBox('Still open', row.still_open)}${reviewDetailBox('Let go', row.let_go)}${reviewDetailBox('Next move', row.tomorrow_first_move)}${reviewDetailBox('Notes', row.notes || 'No extra notes.')}</div></div>`;
+  }
+  if(kind==='weekly'){
+    return `<div class="review-detail-section"><div class="review-detail-head"><div><div class="review-detail-title">🧠 Weekly close-off</div><div class="review-detail-meta">${reviewSafeText(row.week_start)} → ${reviewSafeText(row.week_end || reviewWeeklyDisplayDate(row))}</div></div><button class="btn btn-danger btn-small" onclick="deleteReviewRecord('weekly_reviews','${row.id}','Weekly close-off')">Delete</button></div><div class="review-detail-grid">${reviewDetailBox('Closed', row.closed_notes)}${reviewDetailBox('Open / decide', row.open_notes || row.open_decision_notes)}${reviewDetailBox('Mood + improve', row.mood_notes || row.mood_improve_notes)}${reviewDetailBox('Next week', row.next_notes || row.next_week_notes)}</div></div>`;
+  }
+  return `<div class="review-detail-section"><div class="review-detail-head"><div><div class="review-detail-title">📌 Monthly review</div><div class="review-detail-meta">${reviewSafeText(row.month_key)}</div></div><button class="btn btn-danger btn-small" onclick="deleteReviewRecord('monthly_reviews','${row.id}','Monthly review')">Delete</button></div><div class="review-detail-grid">${reviewDetailBox('Monthly notes', row.notes || row.review_notes)}${reviewDetailBox('Assistant summary', row.assistant_summary || 'Summary will generate from saved reviews later.')}${reviewDetailBox('Open items', JSON.stringify(row.open_items_json || []))}${reviewDetailBox('Next pivot', row.summary_json?.next || 'Choose next month pivot during review.')}</div></div>`;
+}
 function showReviewLogForDate(dateKey, el){
   document.querySelectorAll('.review-day').forEach(d=>d.classList.remove('active'));
   if(el) el.classList.add('active');
   const daily=(state.dailyCloseoffs||[]).find(r=>reviewDateOfDaily(r)===dateKey);
-  const weekly=(state.weeklyReviews||[]).find(r=>r.week_start===dateKey);
+  const weekly=(state.weeklyReviews||[]).find(r=>reviewWeeklyDisplayDate(r)===dateKey);
   const monthKeyForDate=dateKey.slice(0,7);
   const monthly=(state.monthlyReviews||[]).find(r=>r.month_key===monthKeyForDate && dateKey===reviewEndOfMonthDate(reviewLogYear,reviewLogMonth));
-  let title='', meta='', boxes='';
-  if(daily){
-    title=`${reviewSafeText(daily.energy || daily.mood || '🙂')} Daily close-off`;
-    meta=dateKey;
-    boxes=`<div class="detail-box"><h4>Still open</h4><p>${reviewSafeText(daily.still_open)}</p></div><div class="detail-box"><h4>Let go</h4><p>${reviewSafeText(daily.let_go)}</p></div><div class="detail-box"><h4>Next move</h4><p>${reviewSafeText(daily.tomorrow_first_move)}</p></div><div class="detail-box"><h4>Notes</h4><p>${reviewSafeText(daily.notes || 'No extra notes.')}</p></div>`;
-  } else if(weekly){
-    title='🧠 Weekly close-off'; meta=`Week starting ${dateKey}`;
-    boxes=`<div class="detail-box"><h4>Closed</h4><p>${reviewSafeText(weekly.closed_notes)}</p></div><div class="detail-box"><h4>Open / decide</h4><p>${reviewSafeText(weekly.open_notes || weekly.open_decision_notes)}</p></div><div class="detail-box"><h4>Mood + improve</h4><p>${reviewSafeText(weekly.mood_notes || weekly.mood_improve_notes)}</p></div><div class="detail-box"><h4>Next week</h4><p>${reviewSafeText(weekly.next_notes || weekly.next_week_notes)}</p></div>`;
-  } else if(monthly){
-    title='📌 Monthly review'; meta=monthKeyForDate;
-    boxes=`<div class="detail-box"><h4>Monthly notes</h4><p>${reviewSafeText(monthly.notes || monthly.review_notes)}</p></div><div class="detail-box"><h4>Assistant summary</h4><p>${reviewSafeText(monthly.assistant_summary || 'Summary will generate from saved reviews later.')}</p></div><div class="detail-box"><h4>Open items</h4><p>${reviewSafeText(JSON.stringify(monthly.open_items_json || []))}</p></div><div class="detail-box"><h4>Next pivot</h4><p>${reviewSafeText(monthly.summary_json?.next || 'Choose next month pivot during review.')}</p></div>`;
-  } else { return; }
+  const sections=[];
+  if(daily) sections.push(reviewDetailCard('daily', daily, dateKey));
+  if(weekly) sections.push(reviewDetailCard('weekly', weekly, dateKey));
+  if(monthly) sections.push(reviewDetailCard('monthly', monthly, dateKey));
+  if(!sections.length) return;
   const panel=document.getElementById('reviewLogDetail');
-  if(panel) panel.innerHTML=`<div class="review-detail-head"><div><div class="review-detail-title">${title}</div><div class="review-detail-meta">${meta}</div></div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="save-status saved">Loaded</span><button class="btn btn-ghost btn-small" onclick="hideReviewLog()">Back to calendar</button></div></div><div class="review-detail-grid">${boxes}</div>`;
+  if(panel) panel.innerHTML=`<div class="review-detail-head"><div><div class="review-detail-title">Review log</div><div class="review-detail-meta">${reviewSafeText(dateKey)}</div></div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="save-status saved">Loaded</span><button class="btn btn-ghost btn-small" onclick="hideReviewLog()">Back to calendar</button></div></div>${sections.join('<div class="subtle-divider"></div>')}`;
 }
 function hideReviewLog(){
   document.querySelectorAll('.review-day').forEach(d=>d.classList.remove('active'));
   const panel=document.getElementById('reviewLogDetail'); if(panel) panel.innerHTML='';
+}
+async function deleteReviewRecord(table, id, label){
+  if(!id){ alert('Cannot delete: missing record id.'); return; }
+  if(!confirm(`Delete this ${label.toLowerCase()}?\n\nThis cannot be undone.`)) return;
+  try{
+    const {error}=await sb.from(table).delete().eq('id', String(id)).eq('user_id', currentUser.id);
+    if(error) throw error;
+    if(table==='daily_closeoffs') state.dailyCloseoffs=(state.dailyCloseoffs||[]).filter(r=>String(r.id)!==String(id));
+    if(table==='weekly_reviews') state.weeklyReviews=(state.weeklyReviews||[]).filter(r=>String(r.id)!==String(id));
+    if(table==='monthly_reviews') state.monthlyReviews=(state.monthlyReviews||[]).filter(r=>String(r.id)!==String(id));
+    hideReviewLog();
+    renderReviewLogCalendar();
+    renderAssistantOverview();
+    showSaved();
+  }catch(error){ console.error(error); alert(`Could not delete ${label.toLowerCase()}: `+(error.message||error)); }
 }
 function setSaveStatus(id, text, mode=''){
   const el=document.getElementById(id); if(!el) return;
