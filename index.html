@@ -135,7 +135,7 @@
           <div class="card-label">Review inbox</div>
           <h3>Items waiting for a decision</h3>
         </div>
-        <p>This is the decision list. Items should end as closed, moved to monday.com, not now, or no longer needed.</p>
+        <p>This is the decision list. Items should end as closed, moved to monday.com, wait, or no longer needed.</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
         <button class="mini-action carry" onclick="switchAssistantQueue('open',this)">Open loops</button>
@@ -193,7 +193,7 @@
       </div>
       <div class="weekly-tabs">
         <button class="weekly-tab active" onclick="switchWeekly('closed',this)"><div class="count" id="weeklyClosedCount" style="color:var(--green)">0</div><h4>Closed</h4><p>Completed, moved or resolved.</p></button>
-        <button class="weekly-tab" onclick="switchWeekly('open',this)"><div class="count" id="weeklyOpenCount" style="color:var(--orange)">0</div><h4>Open / decide</h4><p>Close, not now, move to monday, or remove.</p></button>
+        <button class="weekly-tab" onclick="switchWeekly('open',this)"><div class="count" id="weeklyOpenCount" style="color:var(--orange)">0</div><h4>Open / decide</h4><p>Close, wait, move to monday, or remove.</p></button>
         <button class="weekly-tab" onclick="switchWeekly('growth',this)"><div class="count" id="weeklyGrowthCount" style="color:var(--purple)">0</div><h4>Mood + improve</h4><p>Patterns, feelings and improvements.</p></button>
         <button class="weekly-tab" onclick="switchWeekly('next',this)"><div class="count" id="weeklyNextCount" style="color:var(--blue)">0</div><h4>Next week</h4><p>Focus and pivot.</p></button>
       </div>
@@ -252,7 +252,7 @@
       <div class="monthly-source-row">
         <div class="monthly-source"><h4>From Growth</h4><p>Reads saved growth areas, month calendars and continue / adjust / pause / complete decisions.</p></div>
         <div class="monthly-source"><h4>From Work</h4><p>Reads meeting close-offs, actions moved to monday.com and unresolved personal work loops.</p></div>
-        <div class="monthly-source"><h4>From Review Inbox</h4><p>Reads item status changes such as close, move to monday, not now or no longer needed.</p></div>
+        <div class="monthly-source"><h4>From Review Inbox</h4><p>Reads item status changes such as close, move to monday, wait or no longer needed.</p></div>
         <div class="monthly-source"><h4>From Mood</h4><p>Reads daily mood emoji and weekly mood + improvement notes. AI summary can come later.</p></div>
       </div>
 
