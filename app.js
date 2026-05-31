@@ -199,7 +199,7 @@ async function loadAppData(){
 
 // ─── TABS ───
 function switchTab(name){
-  const tabs=['overview','goals','fitness','finance','growth','work'];
+  const tabs=['overview','goals','finance','growth','work'];
   document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',tabs[i]===name));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('panel-'+name).classList.add('active');
@@ -249,21 +249,26 @@ function renderGoals(){
 
 // ─── FITNESS ───
 async function setFitGoal(){
-  const val=parseInt(document.getElementById('fitGoalInput').value);
+  const fitGoalInput=document.getElementById('fitGoalInput');
+  if(!fitGoalInput) return;
+  const val=parseInt(fitGoalInput.value);
   if(!val||val<1) return;
   const mk=monthKey(todayObj.getFullYear(),todayObj.getMonth());
   await sb.from('fitness_goals').upsert({month_key:mk,goal:val});
   state.fitGoals[mk]=val;
-  document.getElementById('fitGoalInput').value='';
+  fitGoalInput.value='';
   updateFitGoalDisplay(); renderReports(); showSaved();
 }
 function updateFitGoalDisplay(){
+  const el = document.getElementById('fitGoalDisplay');
+  if(!el) return;
   const mk=monthKey(todayObj.getFullYear(),todayObj.getMonth());
   const goal=state.fitGoals[mk];
-  document.getElementById('fitGoalDisplay').textContent=goal?`Current: ${goal} workouts`:'Not set';
+  el.textContent=goal?`Current: ${goal} workouts`:'Not set';
 }
 async function logWorkout(){
   const input=document.getElementById('workoutInput');
+  if(!input) return;
   const text=input.value.trim();
   if(!text) return;
   const now=new Date();
@@ -281,11 +286,14 @@ async function deleteWorkout(id){
   renderWorkouts(); updateOverview(); showSaved();
 }
 function renderWorkouts(){
+  const fitCountEl = document.getElementById('fit-count');
+  const log = document.getElementById('workoutLog');
+  if(!fitCountEl && !log) return;
   const y=todayObj.getFullYear(),m=todayObj.getMonth();
   const prefix=monthKey(y,m)+'-';
-  const monthCount=Object.keys(state.fitnessHeatmap).filter(k=>k.startsWith(prefix)&&state.fitnessHeatmap[k]).length;
-  document.getElementById('fit-count').textContent=monthCount;
-  const log=document.getElementById('workoutLog');
+  const monthCount=Object.keys(state.fitnessHeatmap||{}).filter(k=>k.startsWith(prefix)&&state.fitnessHeatmap[k]).length;
+  if(fitCountEl) fitCountEl.textContent=monthCount;
+  if(!log) return;
   if(!state.workouts.length){log.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px 0;">No workouts logged yet. Start small — even a walk counts.</div>';return;}
   log.innerHTML=state.workouts.slice(0,8).map(w=>`
     <div class="workout-day">
@@ -300,8 +308,11 @@ function renderWorkouts(){
 // FITNESS CALENDAR
 const calView={year:todayObj.getFullYear(),month:todayObj.getMonth()};
 function buildCalendar(){
+  const gridEl = document.getElementById('calGrid');
+  const labelEl = document.getElementById('calMonthLabel');
+  if(!gridEl || !labelEl) return;
   const{year,month}=calView;
-  document.getElementById('calMonthLabel').textContent=`${MONTH_NAMES[month]} ${year}`;
+  labelEl.textContent=`${MONTH_NAMES[month]} ${year}`;
   const firstDay=new Date(year,month,1).getDay();
   const daysInMonth=new Date(year,month+1,0).getDate();
   const offset=(firstDay+6)%7;
@@ -313,7 +324,7 @@ function buildCalendar(){
     const isToday=todayObj.getFullYear()===year&&todayObj.getMonth()===month&&todayObj.getDate()===d;
     html+=`<div class="cal-cell ${isActive?'active':''} ${isToday?'today':''}" onclick="toggleCalDay('${key}')">${d}</div>`;
   }
-  document.getElementById('calGrid').innerHTML=html;
+  gridEl.innerHTML=html;
 }
 async function toggleCalDay(key){
   if(state.fitnessHeatmap[key]){
@@ -3346,7 +3357,7 @@ function updateOverview(){
   const focus = document.getElementById('ov-growth-focus');
   if(focus){
     const active = activeGrowthGoals();
-    focus.innerHTML = active.length ? active.slice(0,3).map(g=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><span>${escapeHtml(g.icon || '✨')}</span><span style="color:var(--text);font-weight:500;font-size:13px;">${escapeHtml(g.name)}</span></div>`).join('') + (active.length>3?`<div style="font-size:11px;color:var(--muted);">+${active.length-3} more</div>`:'') : '<span style="font-style:italic;font-size:13px;">No growth habits yet</span>';
+    focus.innerHTML = active.length ? active.slice(0,3).map(g=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><span>${escapeHtml(g.icon || '✨')}</span><span style="color:var(--text);font-weight:500;font-size:13px;">${escapeHtml(g.name)}</span></div>`).join('') + (active.length>3?`<div style="font-size:11px;color:var(--muted);">+${active.length-3} more</div>`:'') : '<span style="font-style:italic;font-size:13px;">No growth areas yet</span>';
   }
   const growthMonth = document.getElementById('ov-growth-month');
   if(growthMonth){
