@@ -204,19 +204,63 @@
       <div class="section-heading">
         <div>
           <div class="card-label">Monthly review</div>
-          <h3>Only appears near month-end</h3>
-          <p class="card-sub">Shown from the 25th to the 3rd. The assistant summarises daily close-offs, weekly reviews, meeting close-offs, growth experiments and remaining open loops.</p>
+          <h3 id="monthlyReviewTitle">Monthly assistant summary</h3>
+          <p class="card-sub" id="monthlyReviewSub">A concise end-of-month report built from weekly reviews, daily close-offs, Work close-offs, Growth areas, Finance check-ins and Review Inbox decisions.</p>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <span class="save-status" id="monthlySaveStatus">Not saved yet</span>
           <button class="btn btn-ghost" onclick="saveMonthlyReview()">✓ Save monthly review</button>
         </div>
       </div>
-      <div class="monthly-banner"><div><strong id="monthlyReviewTitle">Monthly review is ready.</strong><p class="card-sub" style="margin-top:5px" id="monthlyReviewSub">Review before moving into next month.</p></div><span class="pill" style="background:var(--soft-orange);color:var(--orange)">Shows 25th–3rd</span></div>
-      <div class="monthly-summary-grid"><div class="monthly-mini"><strong id="monthlyOpenCount" style="color:var(--orange)">0</strong><span class="snapshot-label">Open items</span></div><div class="monthly-mini"><strong id="monthlyWeekCount" style="color:var(--green)">0</strong><span class="snapshot-label">Weekly summaries</span></div><div class="monthly-mini"><strong id="monthlyGrowthCount" style="color:var(--purple)">0</strong><span class="snapshot-label">Growth decisions</span></div><div class="monthly-mini"><strong id="monthlyImproveCount" style="color:var(--blue)">0</strong><span class="snapshot-label">Areas to improve</span></div></div>
-      <div class="field" style="margin-top:12px;"><label>My monthly notes</label><textarea class="textarea" id="monthlyNotes" placeholder="What should I continue, adjust, pause or complete next month?"></textarea></div>
-    </div>
-  </div>
+
+      <div class="monthly-summary-grid">
+        <button class="monthly-stat" type="button" onclick="switchMonthly('closed',this)">
+          <strong id="monthlyClosedCount" style="color:var(--green)">0</strong><span>Closed items</span>
+        </button>
+        <button class="monthly-stat" type="button" onclick="switchMonthly('open',this)">
+          <strong id="monthlyOpenCount" style="color:var(--orange)">0</strong><span>Open items</span>
+        </button>
+        <button class="monthly-stat" type="button" onclick="switchMonthly('growth',this)">
+          <strong id="monthlyGrowthCount" style="color:var(--purple)">0</strong><span>Growth decisions</span>
+        </button>
+        <button class="monthly-stat" type="button" onclick="switchMonthly('work',this)">
+          <strong id="monthlyWorkCount" style="color:var(--blue)">0</strong><span>Meeting close-offs</span>
+        </button>
+        <button class="monthly-stat" type="button" onclick="switchMonthly('commonMood',this)">
+          <strong id="monthlyCommonMood">🙂</strong><span>Most common mood</span>
+        </button>
+        <button class="monthly-stat" type="button" onclick="switchMonthly('mood',this)">
+          <strong id="monthlyMoodImproveCount" style="color:var(--pink)">0</strong><span>Mood + improve</span>
+        </button>
+      </div>
+
+      <div class="monthly-content" id="monthlyContent"></div>
+
+      <div class="monthly-dashboard">
+        <div class="summary-box">
+          <h4>Assistant summary</h4>
+          <ul id="monthlyAssistantSummary">
+            <li>Monthly summary will appear once you have saved reviews.</li>
+          </ul>
+        </div>
+        <div class="summary-box">
+          <h4>Needs more attention</h4>
+          <div class="attention-list" id="monthlyNeedsAttention"></div>
+        </div>
+      </div>
+
+      <div class="monthly-source-row">
+        <div class="monthly-source"><h4>From Growth</h4><p>Reads saved growth areas, month calendars and continue / adjust / pause / complete decisions.</p></div>
+        <div class="monthly-source"><h4>From Work</h4><p>Reads meeting close-offs, actions moved to monday.com and unresolved personal work loops.</p></div>
+        <div class="monthly-source"><h4>From Review Inbox</h4><p>Reads item status changes such as close, move to monday, not now or no longer needed.</p></div>
+        <div class="monthly-source"><h4>From Mood</h4><p>Reads daily mood emoji and weekly mood + improvement notes. AI summary can come later.</p></div>
+      </div>
+
+      <div class="monthly-note-area">
+        <h4 style="font-size:14px;margin-bottom:8px">My monthly notes</h4>
+        <textarea class="textarea" id="monthlyNotes" placeholder="What do I want to remember from this month? What do I need to pay attention to next month?"></textarea>
+      </div>
+    </div>  </div>
 </div>
 
 <!-- DIRECTION -->
