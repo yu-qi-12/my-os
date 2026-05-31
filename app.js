@@ -3837,7 +3837,7 @@ function assistantItemHtml(item, opts={}){
   const color=opts.color||'var(--orange)';
   const title=esc(item.text||item.title||'Open item');
   const meta=esc(item.meta || [item.meeting, item.project, item.due_date?`Due ${item.due_date}`:''].filter(Boolean).join(' · '));
-  return `<div class="loop-item"><div class="dot" style="background:${color}"></div><div class="item-main"><div class="item-title">${title}</div><div class="item-meta">${meta}</div><div class="item-actions"><button class="mini-action done" onclick="assistantMarkDone('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">Close</button><button class="mini-action carry" onclick="assistantMoveToMonday('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">Move to monday</button><button class="mini-action wait" onclick="assistantMarkWaiting('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">Wait</button><button class="mini-action drop" onclick="assistantDropItem('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">No longer needed</button></div></div></div>`;
+  return `<div class="loop-item"><div class="dot" style="background:${color}"></div><div class="item-main"><div class="item-title">${title}</div><div class="item-meta">${meta}</div><div class="item-actions"><button class="mini-action done" onclick="assistantMarkDone('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">Done</button><button class="mini-action carry" onclick="assistantMoveToMonday('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">Move to monday</button><button class="mini-action wait" onclick="assistantMarkWaiting('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">Not now</button><button class="mini-action drop" onclick="assistantDropItem('${item.meetingId||''}',${Number.isInteger(item.index)?item.index:-1})">No longer needed</button></div></div></div>`;
 }
 function renderAssistantOverview(){
   if(!document.getElementById('panel-overview')) return;
@@ -4160,7 +4160,7 @@ assistantItemHtml = function(item, opts={}){
   const title=esc(item.text||item.title||'Open item');
   const meta=esc(item.meta || [item.meeting, item.project, item.due_date?`Due ${item.due_date}`:''].filter(Boolean).join(' · '));
   const isWork=!!item.meetingId && Number.isInteger(item.index);
-  const actions=isWork ? `<div class="item-actions"><button class="mini-action done" onclick="assistantMarkDone('${item.meetingId}',${item.index})">Close</button><button class="mini-action carry" onclick="assistantMoveToMonday('${item.meetingId}',${item.index})">Move to monday</button><button class="mini-action wait" onclick="assistantMarkWaiting('${item.meetingId}',${item.index})">Wait</button><button class="mini-action drop" onclick="assistantDropItem('${item.meetingId}',${item.index})">No longer needed</button></div>` : `<div class="item-actions"><button class="mini-action carry" type="button">Open loop</button><button class="mini-action wait" type="button">Wait</button><button class="mini-action drop" type="button">No longer needed</button></div>`;
+  const actions=isWork ? `<div class="item-actions"><button class="mini-action done" onclick="assistantMarkDone('${item.meetingId}',${item.index})">Done</button><button class="mini-action carry" onclick="assistantMoveToMonday('${item.meetingId}',${item.index})">Move to monday</button><button class="mini-action wait" onclick="assistantMarkWaiting('${item.meetingId}',${item.index})">Not now</button><button class="mini-action drop" onclick="assistantDropItem('${item.meetingId}',${item.index})">No longer needed</button></div>` : `<div class="item-actions"><button class="mini-action carry" type="button">Keep visible</button><button class="mini-action wait" type="button">Not now</button><button class="mini-action drop" type="button">No longer needed</button></div>`;
   return `<div class="loop-item"><div class="dot" style="background:${color}"></div><div class="item-main"><div class="item-title">${title}</div><div class="item-meta">${meta}</div>${actions}</div></div>`;
 };
 renderAssistantQueue = function(type='open'){
@@ -4258,3 +4258,125 @@ saveMonthlyReview = async function(){
     setSaveStatus('monthlySaveStatus','Saved just now','saved'); renderAssistantOverview(); showSaved();
   }catch(error){ console.error(error); setSaveStatus('monthlySaveStatus','Save failed','failed'); alert('Could not save monthly review: '+(error.message||error)); }
 };
+
+// ─── FINAL REVIEW INBOX ACTION LABELS + CLICK BEHAVIOUR ───
+// Keeps Review Inbox wording consistent and makes Daily Close-Off derived items actionable.
+function assistantReviewDecisionKey(item){
+  const base = [item.source||'', item.date||'', item.index ?? '', item.text||item.title||''].join('|');
+  return base;
+}
+function assistantLoadReviewDecisions(){
+  try{return JSON.parse(localStorage.getItem('myos_review_inbox_decisions_'+(currentUser?.id||'guest'))||'{}')||{};}catch{return {};}
+}
+function assistantSaveReviewDecisions(map){
+  try{localStorage.setItem('myos_review_inbox_decisions_'+(currentUser?.id||'guest'), JSON.stringify(map||{}));}catch{}
+}
+function assistantSetReviewDecision(key, status, title='', meta=''){
+  const map=assistantLoadReviewDecisions();
+  if(status==='open') delete map[key];
+  else map[key]={status,title,meta,updated_at:new Date().toISOString()};
+  assistantSaveReviewDecisions(map);
+  renderAssistantOverview();
+  const btn=[...document.querySelectorAll('[onclick^="switchAssistantQueue"]')].find(b=>String(b.getAttribute('onclick')||'').includes(status==='waiting'?"'waiting'":(status==='closed'||status==='monday')?"'closed'":"'open'"));
+  if(status==='waiting') switchAssistantQueue('waiting',btn);
+  else if(status==='closed'||status==='monday') switchAssistantQueue('closed',btn);
+  else switchAssistantQueue('open',btn);
+  showSaved?.();
+}
+const __assistantBaseAllFollowupsFinal = assistantAllFollowups;
+function assistantDailyItemsFromLatest(){
+  const latest=latestDailyCloseoff?.();
+  if(!latest) return [];
+  const date=reviewDateOfDaily(latest);
+  const lines=String(latest.still_open||'').split(/\n|;/).map(s=>s.trim()).filter(Boolean).slice(0,12);
+  const reflectionWords=/\b(tired|upset|stress|stressed|overwhelm|overloaded|sad|angry|frustrated|anxious|can't focus|no patience|not good)\b/i;
+  return lines.map((raw,index)=>{
+    const text=raw.replace(/^\[wait\]\s*/i,'').trim();
+    const type=reflectionWords.test(text)?'reflection':'open';
+    const item={title:text,text,meta:`From Daily Close-Off · ${date}`,source:'daily',date,index,type,status:raw.match(/^\[wait\]/i)?'waiting':'open'};
+    const key=assistantReviewDecisionKey(item);
+    item.reviewKey=key;
+    const saved=assistantLoadReviewDecisions()[key];
+    if(saved?.status) item.status=saved.status;
+    return item;
+  });
+}
+assistantOpenItems = function(){
+  const work=(__assistantBaseAllFollowupsFinal?__assistantBaseAllFollowupsFinal():[]).filter(f=>!assistantIsClosed(f));
+  const daily=assistantDailyItemsFromLatest().filter(i=>!['closed','monday','removed'].includes(i.status));
+  return [...work, ...daily];
+};
+function assistantClosedReviewItems(){
+  const map=assistantLoadReviewDecisions();
+  return Object.values(map).filter(x=>x && (x.status==='closed'||x.status==='monday'));
+}
+function assistantWaitingReviewItems(){
+  const daily=assistantDailyItemsFromLatest().filter(i=>i.status==='waiting');
+  return daily;
+}
+assistantItemHtml = function(item, opts={}){
+  const color=opts.color||((item.type==='reflection')?'var(--purple)':(item.status==='waiting'?'var(--orange)':'var(--orange)'));
+  const title=esc(item.text||item.title||'Open item');
+  const meta=esc(item.meta || [item.meeting, item.project, item.due_date?`Due ${item.due_date}`:''].filter(Boolean).join(' · '));
+  const isWork=!!item.meetingId && Number.isInteger(item.index);
+  let actions='';
+  if(isWork){
+    actions=`<div class="item-actions"><button class="mini-action done" onclick="assistantMarkDone('${item.meetingId}',${item.index})">Close</button><button class="mini-action carry" onclick="assistantMoveToMonday('${item.meetingId}',${item.index})">Move to monday</button><button class="mini-action carry" onclick="assistantMarkOpen('${item.meetingId}',${item.index})">Open loop</button><button class="mini-action wait" onclick="assistantMarkWaiting('${item.meetingId}',${item.index})">Wait</button><button class="mini-action drop" onclick="assistantDropItem('${item.meetingId}',${item.index})">No longer needed</button></div>`;
+  } else {
+    const key=esc(String(item.reviewKey||assistantReviewDecisionKey(item)));
+    const titleArg=esc(String(item.text||item.title||''));
+    const metaArg=esc(String(item.meta||''));
+    if(item.type==='reflection'){
+      actions=`<div class="item-actions"><button class="mini-action done" onclick="assistantSetReviewDecision('${key}','closed','${titleArg}','${metaArg}')">Acknowledge</button><button class="mini-action carry" onclick="assistantSetReviewDecision('${key}','open','${titleArg}','${metaArg}')">Open loop</button><button class="mini-action wait" onclick="assistantSetReviewDecision('${key}','waiting','${titleArg}','${metaArg}')">Wait</button><button class="mini-action drop" onclick="assistantSetReviewDecision('${key}','removed','${titleArg}','${metaArg}')">No longer needed</button></div>`;
+    } else {
+      actions=`<div class="item-actions"><button class="mini-action done" onclick="assistantSetReviewDecision('${key}','closed','${titleArg}','${metaArg}')">Close</button><button class="mini-action carry" onclick="assistantSetReviewDecision('${key}','monday','${titleArg}','${metaArg}')">Move to monday</button><button class="mini-action carry" onclick="assistantSetReviewDecision('${key}','open','${titleArg}','${metaArg}')">Open loop</button><button class="mini-action wait" onclick="assistantSetReviewDecision('${key}','waiting','${titleArg}','${metaArg}')">Wait</button><button class="mini-action drop" onclick="assistantSetReviewDecision('${key}','removed','${titleArg}','${metaArg}')">No longer needed</button></div>`;
+    }
+  }
+  return `<div class="loop-item"><div class="dot" style="background:${color}"></div><div class="item-main"><div class="item-title">${title}</div><div class="item-meta">${meta}</div>${actions}</div></div>`;
+};
+function assistantMarkOpen(id,i){ assistantUpdateFollowup(id,i,{status:'Open', moved_to_monday:false}); }
+assistantMarkDone = function(id,i){ assistantUpdateFollowup(id,i,{status:'Done'}); };
+assistantMoveToMonday = function(id,i){ assistantUpdateFollowup(id,i,{moved_to_monday:true,status:'Done'}); };
+assistantMarkWaiting = function(id,i){ assistantUpdateFollowup(id,i,{status:'Waiting'}); };
+assistantDropItem = function(id,i){ assistantUpdateFollowup(id,i,{status:'Dropped'}); };
+renderAssistantQueue = function(type='open'){
+  const el=document.getElementById('assistantQueueContent'); if(!el) return;
+  const open=assistantOpenItems().filter(i=>i.status!=='waiting' && i.type!=='reflection');
+  const due=assistantDueSoonItems();
+  const waiting=[...assistantWaitingItems(), ...assistantWaitingReviewItems()];
+  const growth=assistantGrowthItems();
+  const reflection=assistantOpenItems().filter(i=>i.type==='reflection' && !['closed','monday','removed'].includes(i.status));
+  const closed=assistantClosedThisWeek();
+  if(type==='due') el.innerHTML=(due.map(i=>assistantItemHtml(i,{color:'var(--blue)'})).join('') || '<div class="card-sub">Nothing due soon.</div>');
+  else if(type==='waiting') el.innerHTML=(waiting.map(i=>assistantItemHtml(i,{color:'var(--orange)'})).join('') || '<div class="card-sub">Nothing waiting right now.</div>');
+  else if(type==='closed'){
+    const localClosed=assistantClosedReviewItems();
+    el.innerHTML=`<div class="loop-list"><div class="loop-item"><div class="dot" style="background:var(--green)"></div><div class="item-main"><div class="item-title">${closed} work action${closed===1?'':'s'} closed this week</div><div class="item-meta">Moved to monday.com, done, dropped or closed in Work.</div></div></div>${localClosed.map(x=>`<div class="loop-item"><div class="dot" style="background:var(--green)"></div><div class="item-main"><div class="item-title">${esc(x.title||'Closed item')}</div><div class="item-meta">${x.status==='monday'?'Moved to monday':'Closed'} · ${esc(x.meta||'Review Inbox')}</div></div></div>`).join('')}</div>`;
+  }
+  else if(type==='growth') el.innerHTML=(reflection.map(g=>assistantItemHtml(g,{color:'var(--purple)'})).join('') || growth.map(g=>`<div class="loop-item"><div class="dot" style="background:var(--purple)"></div><div class="item-main"><div class="item-title">${esc(g.title)}</div><div class="item-meta">${esc(g.note||g.meta)}</div></div></div>`).join('') || '<div class="card-sub">No reflection item right now.</div>');
+  else el.innerHTML=(open.map(i=>assistantItemHtml(i)).join('') || '<div class="card-sub">No open loops. Nice.</div>');
+};
+assistantOpenSnapshot = function(type, btn){
+  document.querySelectorAll('.snapshot').forEach(s=>s.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  const el=document.getElementById('assistantSnapshotContent'); if(!el) return;
+  if(type==='closed'){
+    const localClosed=assistantClosedReviewItems();
+    el.innerHTML=`<div class="loop-list"><div class="loop-item"><div class="dot" style="background:var(--green)"></div><div class="item-main"><div class="item-title">${assistantClosedThisWeek()} work item${assistantClosedThisWeek()===1?'':'s'} closed this week</div><div class="item-meta">Done, dropped or moved to monday.com.</div></div></div>${localClosed.slice(0,3).map(x=>`<div class="loop-item"><div class="dot" style="background:var(--green)"></div><div class="item-main"><div class="item-title">${esc(x.title||'Closed item')}</div><div class="item-meta">${x.status==='monday'?'Moved to monday':'Closed'}</div></div></div>`).join('')}</div>`;
+  } else if(type==='growth'){
+    const reflection=assistantOpenItems().filter(i=>i.type==='reflection');
+    const growth=assistantGrowthItems();
+    el.innerHTML=(reflection.slice(0,3).map(i=>assistantItemHtml(i,{color:'var(--purple)'})).join('') || growth.slice(0,3).map(g=>`<div class="loop-item"><div class="dot" style="background:var(--purple)"></div><div class="item-main"><div class="item-title">${esc(g.title)}</div><div class="item-meta">${esc(g.note||g.meta)}</div></div></div>`).join('') || '<div class="card-sub">No reflection item right now.</div>');
+  } else {
+    const open=assistantOpenItems().filter(i=>i.status!=='waiting' && i.type!=='reflection');
+    el.innerHTML=(open.slice(0,3).map(i=>assistantItemHtml(i)).join('') || '<div class="card-sub">No open loop right now.</div>');
+  }
+};
+// Make labels consistent wherever older strings still render.
+document.addEventListener('click',()=>setTimeout(()=>{
+  document.querySelectorAll('button,.mini-action').forEach(b=>{
+    if(b.textContent.trim()==='Done') b.textContent='Close';
+    if(b.textContent.trim()==='Not now') b.textContent='Wait';
+    if(b.textContent.trim()==='Keep visible') b.textContent='Open loop';
+  });
+},0));
