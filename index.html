@@ -8,7 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=growth-optional-fitness-1">
 </head>
 <body>
 
@@ -458,66 +458,48 @@
     <div class="growth-topbar">
       <div>
         <div class="growth-section-label">Growth</div>
-        <h2>Build, track, then close the loop.</h2>
-        <p>Start fresh with the growth goals that matter now. Track them month by month, then decide whether to continue or complete each one at month end.</p>
+        <h2>Growth areas are user-created experiments.</h2>
+        <p>Track only the growth areas that matter now. Fitness is no longer built in; add it manually for June when you are ready.</p>
       </div>
-      <button class="growth-btn growth-btn-primary" onclick="openAddGrowthModal()">+ Add new habit</button>
+      <button class="growth-btn growth-btn-primary" onclick="openAddGrowthModal()">+ Add growth area</button>
     </div>
 
-    <div class="growth-section-label">Fitness</div>
     <div class="growth-module-card growth-fitness-card">
-      <div class="growth-module-head"><div><h3>Fitness experiment</h3><p>Track movement as one growth area, the same way reading is one growth area.</p></div><span class="growth-module-pill">Growth area</span></div>
-
-  <div class="grid-2">
-    <div class="card">
-      <div class="card-label">Fitness this month</div>
-      <div class="big-number" style="color:var(--blue)" id="fit-count">0</div>
-      <div class="card-sub" style="margin-top:4px">movement days logged</div>
-      <div class="goal-setter" style="margin-top:16px;">
-        <label>Monthly goal:</label>
-        <input type="number" id="fitGoalInput" min="1" max="60" placeholder="e.g. 12">
-        <button class="add-btn" onclick="setFitGoal()">Set</button>
-        <span id="fitGoalDisplay" style="font-size:12px;color:var(--muted);"></span>
+      <div class="growth-module-head">
+        <div><h3>No built-in Fitness area</h3><p>Fitness has been removed from the default Growth page. Add it as a new June growth area when you want to start tracking it intentionally.</p></div>
+        <span class="growth-module-pill">Optional</span>
       </div>
-      <div class="add-row" style="margin-top:4px">
-        <input class="add-input" id="workoutInput" placeholder="e.g. 30min run, chest day…">
-        <button class="add-btn" onclick="logWorkout()">Log</button>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-label">Current setup</div>
+          <div style="font-size:28px;font-weight:800;color:var(--purple);line-height:1;margin-bottom:6px;">User-created only</div>
+          <div class="card-sub">Book reading stays if it already exists. Fitness will not appear unless you create it as a growth area.</div>
+        </div>
+        <div class="card">
+          <div class="card-label">June idea</div>
+          <div style="font-size:18px;font-weight:800;margin-bottom:6px;">Fitness</div>
+          <div class="card-sub" style="margin-bottom:12px;">Purpose: feel stronger, clearer and more emotionally steady — not just count workouts.</div>
+          <button class="growth-btn growth-btn-primary growth-btn-sm" onclick="openAddGrowthModal()">+ Add Fitness for June</button>
+        </div>
       </div>
-    </div>
-    <div class="card">
-      <div class="card-label">Activity calendar</div>
-      <div class="cal-header">
-        <button class="cal-nav" onclick="calPrev()">‹</button>
-        <span class="cal-month-label" id="calMonthLabel"></span>
-        <button class="cal-nav" onclick="calNext()">›</button>
-      </div>
-      <div class="cal-dow"><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span></div>
-      <div class="cal-grid" id="calGrid"></div>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-label">Recent sessions</div>
-    <div id="workoutLog"><div style="color:var(--muted);font-size:13px;padding:8px 0;">No workouts logged yet.</div></div>
-  </div>
-
     </div>
 
     <div class="grid-3 growth-summary-grid">
-      <div class="card"><div class="card-label">Active habits</div><div class="card-value" id="growth-active-count" style="color:var(--blue)">0</div><div class="card-sub">currently tracking</div></div>
+      <div class="card"><div class="card-label">Active areas</div><div class="card-value" id="growth-active-count" style="color:var(--blue)">0</div><div class="card-sub">currently tracking</div></div>
       <div class="card"><div class="card-label">Tracked this month</div><div class="card-value" id="growth-month-days" style="color:var(--purple)">0</div><div class="card-sub">unique days completed</div></div>
       <div class="card"><div class="card-label">Closed loops</div><div class="card-value" id="growth-complete-count" style="color:var(--green)">0</div><div class="card-sub">completed habits</div></div>
     </div>
 
-    <div class="growth-section-label">Active Habits</div>
+    <div class="growth-section-label">Active Growth Areas</div>
     <div class="growth-empty-state" id="growthEmptyState" style="display:none;">
       <div style="font-size:30px;margin-bottom:8px;">🌱</div>
-      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;margin-bottom:4px;">No growth habits yet</div>
-      <div class="card-sub" style="margin-bottom:14px;">Add a goal such as reading, 3D course, coding, language learning or journaling.</div>
-      <button class="growth-btn growth-btn-primary" onclick="openAddGrowthModal()">+ Add your first habit</button>
+      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;margin-bottom:4px;">No growth areas yet</div>
+      <div class="card-sub" style="margin-bottom:14px;">Add an area such as reading, fitness, 3D course, coding, language learning or journaling.</div>
+      <button class="growth-btn growth-btn-primary" onclick="openAddGrowthModal()">+ Add your first growth area</button>
     </div>
     <div class="growth-habits-grid" id="growthHabitList"></div>
 
-    <button class="growth-btn growth-btn-ghost growth-add-full" onclick="openAddGrowthModal()">+ Add new habit</button>
+    <button class="growth-btn growth-btn-ghost growth-add-full" onclick="openAddGrowthModal()">+ Add new growth area</button>
 
     <div class="growth-completed-section" id="growthCompletedSection" style="display:none;">
       <div class="growth-section-label">Completed</div>
@@ -529,8 +511,8 @@
     <div class="growth-modal">
       <h2>New Habit</h2>
       <div class="growth-form-row">
-        <label class="growth-form-label">Name</label>
-        <input class="growth-form-input" id="growthGoalName" type="text" placeholder="e.g. Reading, coding, Spanish…">
+        <label class="growth-form-label">Growth area name</label>
+        <input class="growth-form-input" id="growthGoalName" type="text" placeholder="e.g. Reading, Fitness, 3D course…">
       </div>
       <div class="growth-form-row">
         <label class="growth-form-label">Icon</label>
@@ -548,7 +530,7 @@
         </div>
       </div>
       <div class="growth-form-row">
-        <label class="growth-form-label">Frequency</label>
+        <label class="growth-form-label">Tracking style</label>
         <select class="growth-form-input" id="growthGoalFrequency">
           <option value="Daily">Daily</option>
           <option value="Weekdays only">Weekdays only</option>
@@ -562,7 +544,7 @@
       </div>
       <div class="growth-modal-footer">
         <button class="growth-btn growth-btn-ghost" onclick="closeAddGrowthModal()">Cancel</button>
-        <button class="growth-btn growth-btn-primary" onclick="addGrowthGoal()">Create Habit</button>
+        <button class="growth-btn growth-btn-primary" onclick="addGrowthGoal()">Create Growth Area</button>
       </div>
     </div>
   </div>
@@ -594,6 +576,6 @@
 </div>
 </div><!-- end #app -->
 
-<script src="app.js"></script>
+<script src="app.js?v=growth-optional-fitness-1"></script>
 </body>
 </html>
