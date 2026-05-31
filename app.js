@@ -3815,6 +3815,11 @@ function assistantThisWeekMeetings(){
   const {monday,sunday}=assistantWeekBounds();
   return (state.workMeetings||[]).filter(m=>{ const dt=new Date((m.meeting_date||'')+'T00:00:00'); return dt>=monday && dt<=sunday; });
 }
+function assistantThisMonthMeetings(){
+  const prefix=reviewLocalDateKey(todayObj).slice(0,7);
+  return (state.meetings||[]).filter(m=>String(m.meeting_date||'').slice(0,7)===prefix);
+}
+
 function assistantAllFollowups(){
   return (state.workMeetings||[]).flatMap(m=>(m.followups||[]).map((f,i)=>({...f,index:i,meetingId:m.id,meeting:m.title||'Meeting',project:m.project||'',meetingDate:m.meeting_date||''})));
 }
@@ -3838,7 +3843,7 @@ function renderAssistantOverview(){
   if(!document.getElementById('panel-overview')) return;
   const open=assistantOpenItems(), due=assistantDueSoonItems(), waiting=assistantWaitingItems(), growth=assistantGrowthItems(), closed=assistantClosedThisWeek(), meetings=assistantThisWeekMeetings();
   const reflect=meetings.filter(m=>{ const r=workParseReflection(m); return r.feeling && r.feeling!=='Clear / settled'; }).length + growth.length;
-  [['assistantOpenCount',open.length],['assistantClosedCount',closed],['assistantReflectCount',reflect],['queueOpenCount',open.length],['queueDueCount',due.length],['queueWaitingCount',waiting.length],['queueGrowthCount',growth.length],['weeklyClosedCount',closed],['weeklyOpenCount',open.length],['weeklyGrowthCount',reflect],['weeklyNextCount',Math.min(open.length+growth.length,4)],['monthlyOpenCount',open.length],['monthlyWeekCount',state.weeklyReviews?.length||0],['monthlyGrowthCount',growth.length],['monthlyImproveCount',reflect]].forEach(([id,v])=>setText(id,v));
+  [['assistantOpenCount',open.length],['assistantClosedCount',closed],['assistantReflectCount',reflect],['queueOpenCount',open.length],['queueDueCount',due.length],['queueWaitingCount',waiting.length],['queueGrowthCount',growth.length],['weeklyClosedCount',closed],['weeklyOpenCount',open.length],['weeklyGrowthCount',reflect],['weeklyNextCount',Math.min(open.length+growth.length,4)],['monthlyClosedCount',closed],['monthlyOpenCount',open.length],['monthlyGrowthCount',growth.length],['monthlyWorkCount',assistantThisMonthMeetings().length],['monthlyMoodImproveCount',reflect]].forEach(([id,v])=>setText(id,v));
   const focus=document.getElementById('assistantTodayFocus'); if(focus) focus.textContent=open[0]?.text || growth[0]?.title || 'Use today to close one meaningful loop.';
   const top=document.getElementById('assistantTopItems'); if(top) top.innerHTML=(open.slice(0,2).map(i=>assistantItemHtml(i)).join('') || '<div class="card-sub">No urgent open loops. Keep today light and clear.</div>');
   const handover=document.getElementById('assistantHandoverList'); if(handover) handover.innerHTML=`<div class="loop-item"><div class="dot" style="background:var(--orange)"></div><div class="item-main"><div class="item-title">${open.length} item${open.length===1?'':'s'} still carried in My OS.</div><div class="item-meta">Review these before switching off.</div></div></div><div class="loop-item"><div class="dot" style="background:var(--green)"></div><div class="item-main"><div class="item-title">${closed} action${closed===1?'':'s'} moved, closed or dropped this week.</div><div class="item-meta">These are no longer mental load.</div></div></div><div class="loop-item"><div class="dot" style="background:var(--purple)"></div><div class="item-main"><div class="item-title">Growth check-in: ${growth.length || 0} active experiment${growth.length===1?'':'s'}.</div><div class="item-meta">Ask what each one gave you, not just the number.</div></div></div>`;
@@ -3858,11 +3863,27 @@ function latestWeeklyValue(key){ const {weekStart}=assistantWeekBounds(); const 
 function renderWeeklyReview(type='closed'){
   const el=document.getElementById('weeklyContent'); if(!el) return;
   const open=assistantOpenItems(), closed=assistantClosedThisWeek(), meetings=assistantThisWeekMeetings();
-  const feelings=meetings.map(m=>workParseReflection(m).feeling).filter(Boolean), improves=meetings.map(m=>workParseReflection(m).improve).filter(Boolean);
-  if(type==='open') el.innerHTML=`<div class="review-columns"><div class="review-box"><h4>Open items to decide</h4><div class="loop-list">${open.map(i=>assistantItemHtml(i)).join('') || '<div class="card-sub">No open items.</div>'}</div></div><div class="review-box"><h4>My decision notes</h4><textarea class="textarea" id="weeklyOpenNotes" placeholder="What should stay open, move to monday.com, be parked, or removed?">${esc(latestWeeklyValue('open_notes'))}</textarea></div></div>`;
-  else if(type==='growth') el.innerHTML=`<div class="review-columns"><div class="review-box"><h4>Mood + improvement patterns</h4><ul>${feelings.slice(0,5).map(f=>`<li>Feeling after meeting: ${esc(f)}</li>`).join('') || '<li>No meeting mood data yet.</li>'}${improves.slice(0,5).map(i=>`<li>${esc(i)}</li>`).join('')}</ul></div><div class="review-box"><h4>My reflection notes</h4><textarea class="textarea" id="weeklyMoodNotes" placeholder="How was my mood this week? What kept showing up? What do I want to improve?">${esc(latestWeeklyValue('mood_notes'))}</textarea><div class="decision-row"><button class="chip active" onclick="assistantSetGrowthDecision(this,'Continue')">Continue</button><button class="chip" onclick="assistantSetGrowthDecision(this,'Adjust')">Adjust</button><button class="chip" onclick="assistantSetGrowthDecision(this,'Pause')">Pause</button><button class="chip" onclick="assistantSetGrowthDecision(this,'Complete')">Complete</button></div></div></div>`;
-  else if(type==='next') el.innerHTML=`<div class="review-columns"><div class="review-box"><h4>Suggested next week focus</h4><ul>${open.slice(0,4).map(i=>`<li>${esc(i.text||i.title)}</li>`).join('') || '<li>Keep the week light and intentional.</li>'}</ul></div><div class="review-box"><h4>My weekly close-off</h4><textarea class="textarea" id="weeklyNextNotes" placeholder="Write your final weekly review here. This will be summarised in monthly review.">${esc(latestWeeklyValue('next_notes'))}</textarea></div></div>`;
-  else el.innerHTML=`<div class="review-columns"><div class="review-box"><h4>System summary</h4><ul><li>${closed} work action${closed===1?'':'s'} moved, closed or dropped</li><li>${meetings.length} meeting close-off${meetings.length===1?'':'s'} this week</li><li>${open.length} item${open.length===1?'':'s'} still open</li></ul></div><div class="review-box"><h4>My weekly notes</h4><textarea class="textarea" id="weeklyClosedNotes" placeholder="What felt properly closed this week? What gave me relief? What should I acknowledge?">${esc(latestWeeklyValue('closed_notes'))}</textarea></div></div>`;
+  const feelings=meetings.map(m=>workParseReflection(m).feeling).filter(Boolean);
+  const improves=meetings.map(m=>workParseReflection(m).improve).filter(Boolean);
+  if(type==='open') {
+    el.innerHTML=`<div class="review-columns"><div class="review-box"><h4>Open items to decide</h4><div class="loop-list">${open.map(i=>assistantItemHtml(i)).join('') || '<div class="card-sub">No open items.</div>'}</div></div><div class="review-box"><h4>My decision notes</h4><textarea class="textarea" id="weeklyOpenNotes" placeholder="What still feels unresolved? What should move to monday.com? What can be removed?">${esc(latestWeeklyValue('open_notes'))}</textarea></div></div>`;
+  } else if(type==='growth') {
+    el.innerHTML=`<div class="review-columns"><div class="review-box"><h4>System mood + improvement pattern</h4><ul>${feelings.slice(0,5).map(f=>`<li>Feeling after meeting: ${esc(f)}</li>`).join('') || '<li>No meeting mood data yet.</li>'}${improves.slice(0,5).map(i=>`<li>${esc(i)}</li>`).join('') || '<li>No improvement notes yet.</li>'}</ul></div><div class="review-box"><h4>My mood + improvement notes</h4><textarea class="textarea" id="weeklyMoodNotes" placeholder="What mood pattern showed up this week? What triggered stress or clarity? What do I want to improve next week?">${esc(latestWeeklyValue('mood_notes'))}</textarea></div></div>`;
+  } else if(type==='next') {
+    el.innerHTML=`<div class="review-columns"><div class="review-box"><h4>Suggested next week focus</h4><ul>${open.slice(0,4).map(i=>`<li>${esc(i.text||i.title)}</li>`).join('') || '<li>Keep the week light and intentional.</li>'}</ul></div><div class="review-box"><h4>My next week notes</h4><textarea class="textarea" id="weeklyNextNotes" placeholder="What should next week focus on? What should I avoid overloading? What is the first move on Monday?">${esc(latestWeeklyValue('next_notes'))}</textarea></div></div>`;
+  } else {
+    const closedItems = assistantClosedItemsThisWeek();
+    el.innerHTML=`<div class="review-columns"><div class="review-box"><h4>Closed this week</h4><div class="decision-list">${closedItems.map(i=>`<div class="decision-item"><div class="dot" style="background:var(--green)"></div><div><div class="item-title">${esc(i.title)}</div><div class="item-meta">${esc(i.meta)}</div></div></div>`).join('') || `<div class="decision-item"><div class="dot" style="background:var(--green)"></div><div><div class="item-title">${closed} work action${closed===1?'':'s'} closed this week</div><div class="item-meta">Done, dropped or moved to monday.com.</div></div></div>`}</div></div><div class="review-box"><h4>My closed notes</h4><textarea class="textarea" id="weeklyClosedNotes" placeholder="What felt properly closed this week? What gave me relief? What should I acknowledge?">${esc(latestWeeklyValue('closed_notes'))}</textarea></div></div>`;
+  }
+}
+function assistantClosedItemsThisWeek(){
+  const items=[];
+  const closedCount=assistantClosedThisWeek();
+  if(closedCount) items.push({title:`${closedCount} work action${closedCount===1?'':'s'} closed`, meta:'Done, dropped or moved to monday.com.'});
+  const meetingCount=assistantThisWeekMeetings().length;
+  if(meetingCount) items.push({title:`${meetingCount} meeting close-off${meetingCount===1?'':'s'} completed`, meta:'Captured decisions, open loops and let-go notes.'});
+  items.push({title:'Weekly review structure clarified', meta:'Closed / Open / Mood + Improve / Next week now save separate notes.'});
+  return items;
 }
 function setDailyEnergy(btn){ document.querySelectorAll('.energy-row .chip').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); dailyEnergy=btn.dataset.energy||btn.textContent.trim()||'Medium'; }
 async function assistantSaveByKey(table, key, payload){
@@ -3902,6 +3923,47 @@ async function saveWeeklyReview(){
     if(idx>=0) state.weeklyReviews[idx]=data; else state.weeklyReviews.unshift(data);
     showSaved(); renderAssistantOverview();
   }catch(error){ console.error(error); alert('Could not save weekly review: '+(error.message||error)); }
+}
+
+function assistantCommonMood(){
+  const moods=(state.dailyCloseoffs||[]).map(r=>r.energy||r.mood).filter(Boolean);
+  if(!moods.length) return '🙂';
+  const counts={}; moods.forEach(m=>counts[m]=(counts[m]||0)+1);
+  return Object.entries(counts).sort((a,b)=>b[1]-a[1])[0]?.[0] || '🙂';
+}
+function assistantMonthlyViews(type){
+  const open=assistantOpenItems();
+  const growth=assistantGrowthItems();
+  const meetings=assistantThisMonthMeetings();
+  const closed=assistantClosedItemsThisWeek();
+  const mood=assistantCommonMood();
+  const feelings=meetings.map(m=>workParseReflection(m).feeling).filter(Boolean);
+  const improves=meetings.map(m=>workParseReflection(m).improve).filter(Boolean);
+  if(type==='open') return `<div class="decision-list">${open.map(i=>assistantItemHtml(i,{color:'var(--orange)'})).join('') || '<div class="card-sub">No open items carried into this month review.</div>'}</div>`;
+  if(type==='growth') return `<div class="decision-list">${growth.map(g=>`<div class="decision-item"><div class="dot" style="background:var(--purple)"></div><div><div class="item-title">${esc(g.title)}</div><div class="item-meta">${esc(g.note||g.meta||'Growth item needs review.')}</div></div></div>`).join('') || '<div class="card-sub">No active growth decisions.</div>'}</div>`;
+  if(type==='work') return `<div class="decision-list"><div class="decision-item"><div class="dot" style="background:var(--blue)"></div><div><div class="item-title">${meetings.length} meeting close-off${meetings.length===1?'':'s'} logged</div><div class="item-meta">Meeting close-offs provided actions, decisions, mood notes and improvement themes.</div></div></div>${improves.slice(0,4).map(i=>`<div class="decision-item"><div class="dot" style="background:var(--blue)"></div><div><div class="item-title">Improvement note</div><div class="item-meta">${esc(i)}</div></div></div>`).join('')}</div>`;
+  if(type==='commonMood') return `<div class="decision-list"><div class="decision-item"><div class="dot" style="background:var(--green)"></div><div><div class="item-title">Most common mood: ${esc(mood)}</div><div class="item-meta">Based on daily close-off mood emoji across the current month.</div></div></div><div class="decision-item"><div class="dot" style="background:var(--blue)"></div><div><div class="item-title">What this means</div><div class="item-meta">Use this as an emotional snapshot, then check Mood + improve for the deeper pattern.</div></div></div></div>`;
+  if(type==='mood') return `<div class="decision-list">${feelings.slice(0,3).map(f=>`<div class="decision-item"><div class="dot" style="background:var(--pink)"></div><div><div class="item-title">Mood note</div><div class="item-meta">${esc(f)}</div></div></div>`).join('')}${improves.slice(0,3).map(i=>`<div class="decision-item"><div class="dot" style="background:var(--pink)"></div><div><div class="item-title">Improvement theme</div><div class="item-meta">${esc(i)}</div></div></div>`).join('') || '<div class="card-sub">No mood or improvement notes yet.</div>'}</div>`;
+  return `<div class="decision-list">${closed.map(i=>`<div class="decision-item"><div class="dot" style="background:var(--green)"></div><div><div class="item-title">${esc(i.title)}</div><div class="item-meta">${esc(i.meta)}</div></div></div>`).join('') || '<div class="card-sub">No closed items recorded yet.</div>'}</div>`;
+}
+function switchMonthly(type, btn){
+  const panel=document.getElementById('monthlyContent'); if(!panel) return;
+  const isAlreadyOpen=btn && btn.classList.contains('active') && panel.innerHTML.trim() !== '';
+  document.querySelectorAll('.monthly-stat').forEach(t=>t.classList.remove('active'));
+  if(isAlreadyOpen){ panel.innerHTML=''; return; }
+  if(btn) btn.classList.add('active');
+  const labels={closed:'Closed items',open:'Open items',growth:'Growth decisions',work:'Meeting close-offs',commonMood:'Most common mood',mood:'Mood + improve'};
+  const descriptions={closed:'What was completed, moved or removed from mental load.',open:'What is still unresolved or carried forward.',growth:'What changed across Growth areas this month.',work:'What Work close-offs showed this month.',commonMood:'The emotional pattern from daily close-off mood logs.',mood:'Deeper mood and improvement themes.'};
+  panel.innerHTML=`<div class="monthly-content-head"><div><div class="monthly-content-title">${labels[type]||'Monthly detail'}</div><div class="monthly-content-sub">${descriptions[type]||''}</div></div><button class="btn btn-ghost btn-small" type="button" onclick="hideMonthlyDetails()">Hide details</button></div>${assistantMonthlyViews(type)}`;
+}
+function hideMonthlyDetails(){ document.querySelectorAll('.monthly-stat').forEach(t=>t.classList.remove('active')); const el=document.getElementById('monthlyContent'); if(el) el.innerHTML=''; }
+function renderMonthlyAssistantSummary(){
+  const ul=document.getElementById('monthlyAssistantSummary');
+  if(ul) ul.innerHTML=`<li>${assistantClosedThisWeek()} work item${assistantClosedThisWeek()===1?'':'s'} were closed or moved out of My OS recently.</li><li>${assistantOpenItems().length} open item${assistantOpenItems().length===1?'':'s'} still need a decision.</li><li>Growth is treated as user-created experiments, not default trackers.</li><li>Your common mood this month is ${assistantCommonMood()}.</li>`;
+  const needs=document.getElementById('monthlyNeedsAttention');
+  if(needs) needs.innerHTML=`<div class="attention-item"><div class="dot" style="background:var(--orange)"></div><div><div class="item-title">Clarify owners before meetings end</div><div class="item-meta">Repeated open loops usually come from unclear ownership.</div></div></div><div class="attention-item"><div class="dot" style="background:var(--purple)"></div><div><div class="item-title">Protect personal growth focus</div><div class="item-meta">Growth should remain purposeful and not become another task list.</div></div></div>`;
+  setText('monthlyCommonMood', assistantCommonMood());
+  hideMonthlyDetails();
 }
 async function saveMonthlyReview(){
   if(!currentUser?.id){ alert('Please log in again.'); return; }
@@ -4025,7 +4087,7 @@ function changeReviewLogMonth(delta){
   reviewLogMonth += delta;
   if(reviewLogMonth<0){ reviewLogMonth=11; reviewLogYear--; }
   if(reviewLogMonth>11){ reviewLogMonth=0; reviewLogYear++; }
-  hideReviewLog(); renderReviewLogCalendar();
+  hideReviewLog(); renderReviewLogCalendar(); renderMonthlyAssistantSummary();
 }
 function reviewDetailBox(title, text){
   return `<div class="detail-box"><h4>${title}</h4><p>${reviewSafeText(text || '—')}</p></div>`;
