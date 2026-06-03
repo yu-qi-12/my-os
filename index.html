@@ -8,7 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=review-inbox-final-3">
+<link rel="stylesheet" href="style.css?v=carry-growth-sync-1">
 </head>
 <body>
 
@@ -79,9 +79,9 @@
 
     <div class="top-grid">
       <div class="card attention-card">
-        <div class="card-label">Today’s focus</div>
-        <div class="today-focus" id="assistantTodayFocus">Clear the most important open loop first.</div>
-        <p class="card-sub">The assistant uses your close-offs and open loops to suggest a starting point.</p>
+        <div class="card-label">Waiting inbox</div>
+        <div class="today-focus" id="assistantTodayFocus">Open loops waiting for review</div>
+        <p class="card-sub">Unclosed items from daily close-offs carry forward until you close, move, wait or remove them.</p>
         <div class="subtle-divider"></div>
         <div class="loop-list" id="assistantTopItems"></div>
       </div>
@@ -503,29 +503,9 @@
       <div>
         <div class="growth-section-label">Growth</div>
         <h2>Growth areas are user-created experiments.</h2>
-        <p>Track only the growth areas that matter now. Fitness is no longer built in; add it manually for June when you are ready.</p>
+        <p>Track the micro habits and growth areas that matter now. Add Fitness as a normal growth area whenever you want it, just like reading or learning.</p>
       </div>
       <button class="growth-btn growth-btn-primary" onclick="openAddGrowthModal()">+ Add growth area</button>
-    </div>
-
-    <div class="growth-module-card growth-fitness-card">
-      <div class="growth-module-head">
-        <div><h3>No built-in Fitness area</h3><p>Fitness has been removed from the default Growth page. Add it as a new June growth area when you want to start tracking it intentionally.</p></div>
-        <span class="growth-module-pill">Optional</span>
-      </div>
-      <div class="grid-2">
-        <div class="card">
-          <div class="card-label">Current setup</div>
-          <div style="font-size:28px;font-weight:800;color:var(--purple);line-height:1;margin-bottom:6px;">User-created only</div>
-          <div class="card-sub">Book reading stays if it already exists. Fitness will not appear unless you create it as a growth area.</div>
-        </div>
-        <div class="card">
-          <div class="card-label">June idea</div>
-          <div style="font-size:18px;font-weight:800;margin-bottom:6px;">Fitness</div>
-          <div class="card-sub" style="margin-bottom:12px;">Purpose: feel stronger, clearer and more emotionally steady — not just count workouts.</div>
-          <button class="growth-btn growth-btn-primary growth-btn-sm" onclick="openAddGrowthModal()">+ Add Fitness for June</button>
-        </div>
-      </div>
     </div>
 
     <div class="grid-3 growth-summary-grid">
@@ -537,13 +517,13 @@
     <div class="growth-section-label">Active Growth Areas</div>
     <div class="growth-empty-state" id="growthEmptyState" style="display:none;">
       <div style="font-size:30px;margin-bottom:8px;">🌱</div>
-      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;margin-bottom:4px;">No growth areas yet</div>
-      <div class="card-sub" style="margin-bottom:14px;">Add an area such as reading, fitness, 3D course, coding, language learning or journaling.</div>
+      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;margin-bottom:4px;">No micro habits yet</div>
+      <div class="card-sub" style="margin-bottom:14px;">Add a micro habit such as reading, fitness, 3D course, coding, language learning or journaling.</div>
       <button class="growth-btn growth-btn-primary" onclick="openAddGrowthModal()">+ Add your first growth area</button>
     </div>
     <div class="growth-habits-grid" id="growthHabitList"></div>
 
-    <button class="growth-btn growth-btn-ghost growth-add-full" onclick="openAddGrowthModal()">+ Add new growth area</button>
+    <button class="growth-btn growth-btn-ghost growth-add-full" onclick="openAddGrowthModal()">+ Add new micro habit</button>
 
     <div class="growth-completed-section" id="growthCompletedSection" style="display:none;">
       <div class="growth-section-label">Completed</div>
@@ -553,9 +533,9 @@
 
   <div class="growth-modal-overlay" id="growthAddModal">
     <div class="growth-modal">
-      <h2>New Habit</h2>
+      <h2>New Micro Habit</h2>
       <div class="growth-form-row">
-        <label class="growth-form-label">Growth area name</label>
+        <label class="growth-form-label">Micro habit name</label>
         <input class="growth-form-input" id="growthGoalName" type="text" placeholder="e.g. Reading, Fitness, 3D course…">
       </div>
       <div class="growth-form-row">
@@ -620,6 +600,6 @@
 </div>
 </div><!-- end #app -->
 
-<script src="app.js?v=review-inbox-final-3"></script>
+<script src="app.js?v=carry-growth-sync-1"></script>
 </body>
 </html>
