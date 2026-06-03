@@ -3844,8 +3844,8 @@ function renderAssistantOverview(){
   const open=assistantOpenItems(), due=assistantDueSoonItems(), waiting=assistantWaitingItems(), growth=assistantGrowthItems(), closed=assistantClosedThisWeek(), meetings=assistantThisWeekMeetings();
   const reflect=meetings.filter(m=>{ const r=workParseReflection(m); return r.feeling && r.feeling!=='Clear / settled'; }).length + growth.length;
   [['assistantOpenCount',open.length],['assistantClosedCount',closed],['assistantReflectCount',reflect],['queueOpenCount',open.length],['queueDueCount',due.length],['queueWaitingCount',waiting.length],['queueGrowthCount',growth.length],['weeklyClosedCount',closed],['weeklyOpenCount',open.length],['weeklyGrowthCount',reflect],['weeklyNextCount',Math.min(open.length+growth.length,4)],['monthlyClosedCount',closed],['monthlyOpenCount',open.length],['monthlyGrowthCount',growth.length],['monthlyWorkCount',assistantThisMonthMeetings().length],['monthlyMoodImproveCount',reflect]].forEach(([id,v])=>setText(id,v));
-  const focus=document.getElementById('assistantTodayFocus'); if(focus) focus.textContent=open[0]?.text || growth[0]?.title || 'Use today to close one meaningful loop.';
-  const top=document.getElementById('assistantTopItems'); if(top) top.innerHTML=(open.slice(0,2).map(i=>assistantItemHtml(i)).join('') || '<div class="card-sub">No urgent open loops. Keep today light and clear.</div>');
+  const focus=document.getElementById('assistantTodayFocus'); if(focus) focus.textContent='Open loops waiting for review';
+  const top=document.getElementById('assistantTopItems'); if(top) top.innerHTML=(open.filter(i=>i.status!=='waiting').slice(0,4).map(i=>assistantItemHtml(i)).join('') || '<div class="card-sub">No open loops waiting. Keep today light and clear.</div>');
   const handover=document.getElementById('assistantHandoverList'); if(handover) handover.innerHTML=`<div class="loop-item"><div class="dot" style="background:var(--orange)"></div><div class="item-main"><div class="item-title">${open.length} item${open.length===1?'':'s'} still carried in My OS.</div><div class="item-meta">Review these before switching off.</div></div></div><div class="loop-item"><div class="dot" style="background:var(--green)"></div><div class="item-main"><div class="item-title">${closed} action${closed===1?'':'s'} moved, closed or dropped this week.</div><div class="item-meta">These are no longer mental load.</div></div></div><div class="loop-item"><div class="dot" style="background:var(--purple)"></div><div class="item-main"><div class="item-title">Growth check-in: ${growth.length || 0} active experiment${growth.length===1?'':'s'}.</div><div class="item-meta">Ask what each one gave you, not just the number.</div></div></div>`;
   renderAssistantQueue(assistantQueueTab); renderWeeklyReview(weeklyReviewTab); renderMonthlyReviewVisibility();
 }
@@ -4285,21 +4285,31 @@ function assistantSetReviewDecision(key, status, title='', meta=''){
 }
 const __assistantBaseAllFollowupsFinal = assistantAllFollowups;
 function assistantDailyItemsFromLatest(){
-  const latest=latestDailyCloseoff?.();
-  if(!latest) return [];
-  const date=reviewDateOfDaily(latest);
-  const lines=String(latest.still_open||'').split(/\n|;/).map(s=>s.trim()).filter(Boolean).slice(0,12);
-  const reflectionWords=/\b(tired|upset|stress|stressed|overwhelm|overloaded|sad|angry|frustrated|anxious|can't focus|no patience|not good)\b/i;
-  return lines.map((raw,index)=>{
-    const text=raw.replace(/^\[wait\]\s*/i,'').trim();
-    const type=reflectionWords.test(text)?'reflection':'open';
-    const item={title:text,text,meta:`From Daily Close-Off · ${date}`,source:'daily',date,index,type,status:raw.match(/^\[wait\]/i)?'waiting':'open'};
-    const key=assistantReviewDecisionKey(item);
-    item.reviewKey=key;
-    const saved=assistantLoadReviewDecisions()[key];
-    if(saved?.status) item.status=saved.status;
-    return item;
+  // Accumulate unresolved daily close-off items across all saved days.
+  // A line stays in the inbox until the user closes, moves, waits, or removes it.
+  const rows = (state.dailyCloseoffs || [])
+    .slice()
+    .sort((a,b)=>String(reviewDateOfDaily(a)).localeCompare(String(reviewDateOfDaily(b))));
+  if(!rows.length) return [];
+  const decisions = assistantLoadReviewDecisions();
+  const reflectionWords=/\b(tired|upset|stress|stressed|overwhelm|overloaded|sad|angry|frustrated|anxious|can't focus|no patience|not good|can't concentrate|no focus|burnt out|burnout)\b/i;
+  const items=[];
+  rows.forEach(row=>{
+    const date=reviewDateOfDaily(row);
+    const lines=String(row.still_open||'').split(/\n|;/).map(s=>s.trim()).filter(Boolean).slice(0,20);
+    lines.forEach((raw,index)=>{
+      const text=raw.replace(/^\[wait\]\s*/i,'').trim();
+      if(!text) return;
+      const type=reflectionWords.test(text)?'reflection':'open';
+      const item={title:text,text,meta:`From Daily Close-Off · ${date}`,source:'daily',date,index,type,status:raw.match(/^\[wait\]/i)?'waiting':'open'};
+      const key=assistantReviewDecisionKey(item);
+      item.reviewKey=key;
+      const saved=decisions[key];
+      if(saved?.status) item.status=saved.status;
+      if(!['closed','monday','removed'].includes(item.status)) items.push(item);
+    });
   });
+  return items;
 }
 assistantOpenItems = function(){
   const work=(__assistantBaseAllFollowupsFinal?__assistantBaseAllFollowupsFinal():[]).filter(f=>!assistantIsClosed(f));
